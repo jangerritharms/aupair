@@ -1,0 +1,5 @@
+{
+  "honest_nodes": 2,
+  "interaction_frequency_strategy": "uniform",
+  "partner_selection_strategy": "random"
+}
