@@ -1,6 +1,7 @@
 """
 Module defining messages that agents can send to each other.
 """
+import json
 
 class MessageTypes(object):
     REGISTER = 1
@@ -19,3 +20,14 @@ class Message(object):
         self.type = message_type
         self.payload = payload
         self.sender = sender 
+
+    def to_json(self):
+        """
+        Converts the method to a json compatible format.
+        """
+
+        return json.dumps({
+            "type": self.type,
+            "payload": self.payload,
+            "sender": self.sender.encode('hex')
+        })

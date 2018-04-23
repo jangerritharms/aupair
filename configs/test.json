@@ -1,8 +1,8 @@
 {
-  "honest_nodes": 2,
+  "honest_nodes": 10,
   "discovery_server_port": 8000,
   "node_port_range_begin": 10000,
-  "emulation_duration": 100,
+  "emulation_duration": 1000,
   "emulation_step_length": 0.01,
   "interaction_frequency_strategy": "uniform",
   "partner_selection_strategy": "random"

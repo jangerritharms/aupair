@@ -1,9 +1,12 @@
 """
 Module defining the discovery server.
 """
-import zmq
-import time
 import logging
+import json
+import zmq
+
+from zmq.eventloop.zmqstream import ZMQStream
+from tornado import ioloop
 
 from src.messages import MessageTypes
 
@@ -30,6 +33,7 @@ class DiscoveryServer(object):
         self.agents = {}
         self.emulation_duration = 0
         self.emulation_step_length = 0
+        self.loop = None
 
     def configure(self, options):
         """
@@ -50,44 +54,38 @@ class DiscoveryServer(object):
         """
         Removes an agent from the discovery server.
         """
-        logging.debug(self.agents)
         del self.agents[public_key]
 
     def handle_message(self, message):
         """
         Message handler for the incoming requests from agents.
         """
-        logging.debug('Received message of type %s', message.type)
-        if message.type == MessageTypes.REGISTER:
-            self.register_agent(message.sender, message.payload)
-        if message.type == MessageTypes.UNREGISTER:
-            self.unregister_agent(message.sender)
+        msg = json.loads(message[0].decode('string-escape').strip('"'))
+        if msg['type'] == MessageTypes.REGISTER:
+            self.register_agent(msg['sender'], msg['payload'])
+        elif msg['type'] == MessageTypes.UNREGISTER:
+            self.unregister_agent(msg['sender'])
         else:
-            logging.warning('Unhandled message of type %s', message.type)
+            logging.warning('Unhandled message of type %s', msg['type'])
+
+    def stop_condition(self):
+        """
+        Check the condition and stops the main loop if condition fails.
+        """
+        if len(self.agents) == 0:
+            self.loop.stop()
 
     def run(self):
         """
         The main loop for the discovery server.
         """
-        self.context = zmq.Context()
-        self.socket = self.context.socket(zmq.PULL)
-        self.socket.bind('tcp://*:%s' % self.port)
+        context = zmq.Context()
+        socket = context.socket(zmq.PULL) # pylint: disable=no-member
+        socket.bind('tcp://*:%s' % self.port)
+        stream = ZMQStream(socket)
 
-        step = 0
-        while step < self.emulation_duration or len(self.agents) > 0:
-            logging.debug('Discovery step')
-            start = time.time()
-            message = None
-            try:
-                message = self.socket.recv_pyobj(flags=zmq.NOBLOCK)
-            except:
-                pass
-
-            if message is not None:
-                self.handle_message(message)
-
-            step += 1
-            logging.debug(time.time() - start)
-            if time.time() - start > self.emulation_step_length:
-                logging.debug('waiting %s', self.emulation_step_length - (time.time() - start))
-                time.sleep(self.emulation_step_length - (time.time() - start))
+        stream.on_recv(self.handle_message)
+        self.loop = ioloop.IOLoop.current()
+        cb_stop_condition = ioloop.PeriodicCallback(self.stop_condition, 1000)
+        cb_stop_condition.start()
+        self.loop.start()

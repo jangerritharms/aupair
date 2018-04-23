@@ -2,11 +2,12 @@
 Module defining the agent class.
 """
 import logging
-import zmq
 import time
+import zmq
+
+from tornado import ioloop
 
 from src.pyipv8.ipv8.keyvault.crypto import ECCrypto
-
 from src.messages import Message, MessageTypes
 
 def spawn_agent(agent):
@@ -15,7 +16,7 @@ def spawn_agent(agent):
     """
     agent.run()
 
-class Agent:
+class Agent(object):
     """
     Agents are the entities in the network that perform interactions. An agent
     is identified by its public key.
@@ -30,6 +31,7 @@ class Agent:
         self.discovery = None
         self.receiver = None
         self.discovery_address = ''
+        self.loop = None
 
         self.private_key = ECCrypto().generate_key('curve25519')
         self.public_key = self.private_key.pub()
@@ -70,16 +72,18 @@ class Agent:
         """
         Called by the agent to register with the discovery server.
         """
-        self.discovery.send_pyobj(Message(MessageTypes.REGISTER,
-                                          self.public_key.key_to_bin(),
-                                          {'address': self.address}))
+        self.discovery.send_json(Message(MessageTypes.REGISTER,
+                                         self.public_key.key_to_bin(),
+                                         {'address': self.address}).to_json())
 
     def unregister(self):
         """
         Called by the agent to register with the discovery server.
         """
-        self.discovery.send_pyobj(Message(MessageTypes.UNREGISTER,
-                                          self.public_key.key_to_bin()))
+        self.discovery.send_json(Message(MessageTypes.UNREGISTER,
+                                         self.public_key.key_to_bin()).to_json())
+        time.sleep(1)
+        self.loop.stop()
 
 
     def run(self):
@@ -87,31 +91,14 @@ class Agent:
         Starts the main loop of the agent.
         """
         self.context = zmq.Context()
-        self.receiver = self.context.socket(zmq.PULL)
-        self.discovery = self.context.socket(zmq.PUSH)
+        self.receiver = self.context.socket(zmq.PULL) # pylint: disable=no-member
+        self.discovery = self.context.socket(zmq.PUSH) # pylint: disable=no-member
         logging.debug('Starting agent at port %d', self.port)
         self.receiver.bind(self.address)
         self.discovery.connect(self.discovery_address)
 
         self.register()
 
-        step = 0
-        while step < self.emulation_duration:
-            logging.debug('Agent step')
-            start = time.time()
-            message = None
-            try:
-                message = self.receiver.recv(flags=zmq.NOBLOCK)
-            except zmq.Again:
-                pass
-
-            if message is not None:
-                self.handle_message(message)
-
-            step += 1
-            logging.debug(time.time() - start)
-            if time.time() - start > self.emulation_step_length:
-                logging.debug('waiting %s', self.emulation_step_length - (time.time() - start))
-                time.sleep(self.emulation_step_length - (time.time() - start))
-
-        self.unregister()
+        self.loop = ioloop.IOLoop.current()
+        self.loop.call_later(10, self.unregister)
+        self.loop.start()
