@@ -6,6 +6,11 @@ import json
 class MessageTypes(object):
     REGISTER = 1
     UNREGISTER = 2
+    AGENT_REQUEST = 3
+    AGENT_REPLY = 4
+    BLOCK = 5
+    BLOCK_REPLY = 6
+    BLOCK_PAIR = 7
 
 class Message(object):
     """
@@ -19,7 +24,7 @@ class Message(object):
 
         self.type = message_type
         self.payload = payload
-        self.sender = sender 
+        self.sender = sender
 
     def to_json(self):
         """
@@ -29,5 +34,5 @@ class Message(object):
         return json.dumps({
             "type": self.type,
             "payload": self.payload,
-            "sender": self.sender.encode('hex')
+            "sender": self.sender
         })

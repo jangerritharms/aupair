@@ -8,7 +8,7 @@ import zmq
 from zmq.eventloop.zmqstream import ZMQStream
 from tornado import ioloop
 
-from src.messages import MessageTypes
+from src.messages import Message, MessageTypes
 
 def spawn_discovery_server(discovery):
     """
@@ -29,6 +29,8 @@ class DiscoveryServer(object):
         """
         self.context = None
         self.socket = None
+        self.sender = None
+        self.receiver = None
         self.port = -1
         self.agents = {}
         self.emulation_duration = 0
@@ -56,15 +58,19 @@ class DiscoveryServer(object):
         """
         del self.agents[public_key]
 
-    def handle_message(self, message):
+    def handle_message(self, stream, message):
         """
         Message handler for the incoming requests from agents.
         """
         msg = json.loads(message[0].decode('string-escape').strip('"'))
         if msg['type'] == MessageTypes.REGISTER:
-            self.register_agent(msg['sender'], msg['payload'])
+            self.register_agent(msg['payload']['public_key'], {'address': msg['sender']})
         elif msg['type'] == MessageTypes.UNREGISTER:
-            self.unregister_agent(msg['sender'])
+            self.unregister_agent(msg['payload'])
+        elif msg['type'] == MessageTypes.AGENT_REQUEST:
+            self.send(msg['sender'], Message(MessageTypes.AGENT_REPLY,
+                                             None,
+                                             self.agents.items()).to_json())
         else:
             logging.warning('Unhandled message of type %s', msg['type'])
 
@@ -75,16 +81,24 @@ class DiscoveryServer(object):
         if len(self.agents) == 0:
             self.loop.stop()
 
+    def send(self, address, message):
+        """
+        Send a message using the sending device.
+        """
+        self.sender.connect(address)
+        self.sender.send_json(message)
+
     def run(self):
         """
         The main loop for the discovery server.
         """
         context = zmq.Context()
-        socket = context.socket(zmq.PULL) # pylint: disable=no-member
-        socket.bind('tcp://*:%s' % self.port)
-        stream = ZMQStream(socket)
+        self.receiver = context.socket(zmq.PULL) # pylint: disable=no-member
+        self.sender = context.socket(zmq.PUSH) # pylint: disable=no-member
+        self.receiver.bind('tcp://*:%s' % self.port)
+        stream_pull = ZMQStream(self.receiver)
 
-        stream.on_recv(self.handle_message)
+        stream_pull.on_recv_stream(self.handle_message, copy=True)
         self.loop = ioloop.IOLoop.current()
         cb_stop_condition = ioloop.PeriodicCallback(self.stop_condition, 1000)
         cb_stop_condition.start()

@@ -5,5 +5,6 @@
   "emulation_duration": 1000,
   "emulation_step_length": 0.01,
   "interaction_frequency_strategy": "uniform",
+  "interaction_frequency_constant": 0.1,
   "partner_selection_strategy": "random"
 }
