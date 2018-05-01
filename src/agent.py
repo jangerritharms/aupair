@@ -43,6 +43,7 @@ class Agent(object):
         self.discovery_address = ''
         self.loop = None
         self.database = None
+        self.agents = []
         self.serializer = Serializer()
 
         self.private_key = ECCrypto().generate_key('curve25519')
@@ -52,30 +53,37 @@ class Agent(object):
         self.emulation_step_length = 0
         self.address = ''
 
+        FORMAT= '%(address)s %(message)s'
+        logging.basicConfig(format=FORMAT)
 
-    def request_interaction(self, partner):
+        self.startup_time = 5
+
+    def request_interaction(self, partner = None):
         """
         Requests a new interaction with the given partner.
 
         :param partner: Dict of the partner including public_key and address
         """
+        while partner is None or partner[1]['address'] == self.address:
+            partner = random.choice(self.agents)
+        partner = {'public_key': partner[0], 'address': partner[1]['address']}
         new_block = TrustChainBlock.create({"up": 10, "down": 10},
                                            self.database,
                                            str(self.public_key.key_to_bin()),
-                                           link_pk=str(partner['public_key']))
+                                           link_pk=str(partner['public_key']).decode('hex'))
+
         new_block.sign(self.private_key)
+        self.database.add_block(new_block)
         self.send(partner['address'], Message(MessageTypes.BLOCK,
                                               self.address,
                                               new_block.pack().encode('base64')).to_json())
+        logging.debug('%s requesting interaction with %s', self.address, partner['address'], extra={'address': self.address})
 
-    def request_audit(self):
-        pass
-
-
-    def select_next_interaction_partner(self):
+    def get_agents(self):
         """
         Selects the next interaction partner.
         """
+        logging.debug('Getting agents', extra={'address': self.address})
         self.send(self.discovery_address, Message(MessageTypes.AGENT_REQUEST,
                                                   self.address).to_json())
 
@@ -113,17 +121,14 @@ class Agent(object):
         payload = HalfBlockPairPayload.from_unpack_list(*unpacked_list[0][0])
         return TrustChainBlock.from_pair_payload(payload, self.serializer)
 
-
     def handle_message(self, message):
         """
         Handle messages received from other agents.
         """
         msg = json.loads(message[0].decode('string-escape').strip('"'))
         if msg['type'] == MessageTypes.AGENT_REPLY:
-            partner = None
-            while partner is None or partner[1]['address'] == self.address:
-                partner = random.choice(msg['payload'])
-            self.request_interaction({'public_key': partner[0], 'address': partner[1]['address']})
+            self.agents = msg['payload']
+
         elif msg['type'] == MessageTypes.BLOCK:
             block = self.block_from_payload(msg['payload'])
             new_block = TrustChainBlock.create(None,
@@ -131,30 +136,19 @@ class Agent(object):
                                                str(self.public_key.key_to_bin()),
                                                link=block)
             new_block.sign(self.private_key)
+            self.database.add_block(block)
+            self.database.add_block(new_block)
+            logging.debug(block.validate(self.database))
+            logging.debug(new_block.validate(self.database))
             self.send(msg['sender'], Message(MessageTypes.BLOCK_REPLY,
                                              self.address,
                                              new_block.pack().encode('base64')).to_json())
+
         elif msg['type'] == MessageTypes.BLOCK_REPLY:
             block = self.block_from_payload(msg['payload'])
+
             self.database.add_block(block)
-            new_block = TrustChainBlock.create(None,
-                                               self.database,
-                                               str(self.public_key.key_to_bin()),
-                                               link=block)
-            new_block.sign(self.private_key)
-            self.database.add_block(new_block)
-            payload = HalfBlockPairPayload.from_half_blocks(block, new_block).to_pack_list()
-            packet = self.serializer.pack_multiple(payload)
-            self.send(msg['sender'], Message(MessageTypes.BLOCK_PAIR,
-                                             self.address,
-                                             packet.encode('base64')).to_json())
-        elif msg['type'] == MessageTypes.BLOCK_PAIR:
-            block1, block2 = self.block_pair_from_payload(msg['payload'])
-            self.database.add_block(block1)
-            self.database.add_block(block2)
-            logging.debug('Successful interaction between agent %s and agent %s',
-                          self.address,
-                          msg['sender'])
+            logging.debug(block.validate(self.database))
 
     def register(self):
         """
@@ -181,10 +175,10 @@ class Agent(object):
         Emulation step in which the agent decides whether to do something or not.
         """
         choices = [True]
-        choices.extend([False]*1000)
+        # choices.extend([False]*10)
         interact = random.choice(choices)
         if interact:
-            self.select_next_interaction_partner()
+            self.request_interaction()
 
     def send(self, address, message):
         """
@@ -222,7 +216,8 @@ class Agent(object):
         self.sender = self.context.socket(zmq.PUSH) # pylint: disable=no-member
         self.receiver = self.context.socket(zmq.PULL) # pylint: disable=no-member
 
-        logging.debug('Starting agent at port %d', self.port)
+        logging.debug('Starting agent at port %d', self.port, extra={'address': self.address})
+
         self.receiver.bind(self.address)
         stream = ZMQStream(self.receiver)
         stream.on_recv(self.handle_message)
@@ -231,8 +226,9 @@ class Agent(object):
 
         self.loop = ioloop.IOLoop.current()
         self.loop.call_later(self.emulation_duration*self.emulation_step_length, self.unregister)
+        self.loop.call_later(self.startup_time, self.get_agents)
         cb_step = ioloop.PeriodicCallback(self.step, self.emulation_step_length*1000)
-        self.loop.call_later(1, cb_step.start)
+        self.loop.call_later(self.startup_time + 5, cb_step.start)
         self.loop.start()
 
         self.write_data()

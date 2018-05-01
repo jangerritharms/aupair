@@ -34,6 +34,8 @@ class ExperimentRunner(object):
         :param config:
         """
         logging.debug("Opening config file: %s", config)
+        FORMAT = '%(address)s %(message)s'
+        logging.basicConfig(format=FORMAT)
         contents = config.read()
         self.options = json.loads(contents)
 

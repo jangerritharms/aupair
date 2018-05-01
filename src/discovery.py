@@ -68,6 +68,7 @@ class DiscoveryServer(object):
         elif msg['type'] == MessageTypes.UNREGISTER:
             self.unregister_agent(msg['payload'])
         elif msg['type'] == MessageTypes.AGENT_REQUEST:
+            print 'got agent message from %s', msg['sender']
             self.send(msg['sender'], Message(MessageTypes.AGENT_REPLY,
                                              None,
                                              self.agents.items()).to_json())
@@ -87,6 +88,7 @@ class DiscoveryServer(object):
         """
         self.sender.connect(address)
         self.sender.send_json(message)
+        self.sender.disconnect(address)
 
     def run(self):
         """
