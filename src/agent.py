@@ -12,7 +12,7 @@ from zmq.eventloop.zmqstream import ZMQStream
 from tornado import ioloop
 
 from src.pyipv8.ipv8.keyvault.crypto import ECCrypto
-from src.pyipv8.ipv8.attestation.trustchain.block import TrustChainBlock
+from src.pyipv8.ipv8.attestation.trustchain.block import TrustChainBlock, GENESIS_HASH
 from src.pyipv8.ipv8.messaging.serialization import Serializer
 from src.pyipv8.ipv8.attestation.trustchain.payload import HalfBlockPayload, HalfBlockPairPayload
 from src.pyipv8.ipv8.attestation.trustchain.database import TrustChainDB
@@ -79,6 +79,17 @@ class Agent(object):
                                               new_block.pack().encode('base64')).to_json())
         logging.debug('%s requesting interaction with %s', self.address, partner['address'], extra={'address': self.address})
 
+    def request_crawl(self, partner = None):
+        """
+        Request data from the other node.
+        """
+        while partner is None or partner[1]['address'] == self.address:
+            partner = random.choice(self.agents)
+        partner = {'public_key': partner[0], 'address': partner[1]['address']}
+        self.send(partner['address'], Message(MessageTypes.CRAWL_REQUEST,
+                                              self.address).to_json())
+
+
     def get_agents(self):
         """
         Selects the next interaction partner.
@@ -99,7 +110,9 @@ class Agent(object):
         self.port = port
         self.discovery_address = 'tcp://localhost:' + str(options['discovery_server_port'])
         self.database = TrustChainDB('', 'db_'+ str(port))
-        self.database.add_block(TrustChainBlock())
+        genesis_block = TrustChainBlock()
+        genesis_block.public_key = str(self.public_key.key_to_bin())
+        self.database.add_block(genesis_block)
 
         self.address = 'tcp://127.0.0.1:'+ str(self.port)
 
@@ -138,8 +151,6 @@ class Agent(object):
             new_block.sign(self.private_key)
             self.database.add_block(block)
             self.database.add_block(new_block)
-            logging.debug(block.validate(self.database))
-            logging.debug(new_block.validate(self.database))
             self.send(msg['sender'], Message(MessageTypes.BLOCK_REPLY,
                                              self.address,
                                              new_block.pack().encode('base64')).to_json())
@@ -148,7 +159,25 @@ class Agent(object):
             block = self.block_from_payload(msg['payload'])
 
             self.database.add_block(block)
-            logging.debug(block.validate(self.database))
+
+        elif msg['type'] == MessageTypes.CRAWL_REQUEST:
+            blocks = self.database._getall('', ())
+            
+            list_of_packs = []
+            for block in blocks:
+                list_of_packs.append(block.pack().encode('base64'))
+
+            self.send(msg['sender'], Message(MessageTypes.CRAWL_REPLY,
+                                             self.address,
+                                             list_of_packs).to_json())
+
+        elif msg['type'] == MessageTypes.CRAWL_REPLY:
+            list_of_packs = msg['payload']
+            for pack in list_of_packs:
+                block = self.block_from_payload(pack)
+                if block.previous_hash != GENESIS_HASH:
+                    self.database.add_block(block)
+
 
     def register(self):
         """

@@ -11,6 +11,10 @@ class MessageTypes(object):
     BLOCK = 5
     BLOCK_REPLY = 6
     BLOCK_PAIR = 7
+    CRAWL_REQUEST = 8
+    CRAWL_REPLY = 9
+    CRAWL_BLOCK = 10
+    CRAWL_BLOCK = 11
 
 class Message(object):
     """

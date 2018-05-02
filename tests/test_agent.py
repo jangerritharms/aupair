@@ -50,7 +50,7 @@ class TestAgent(unittest.TestCase):
 
     def test1(self):
         "Successful interaction between two nodes."        
-        self.A.request_interaction([self.B.public_key.key_to_bin(),
+        self.A.request_interaction([self.B.public_key.key_to_bin().encode('hex'),
                                     {'address': self.B.address}])
         self.B.handle_message(self.messagesB.pop())
         self.A.handle_message(self.messagesA.pop())
@@ -61,16 +61,16 @@ class TestAgent(unittest.TestCase):
         self.assertEqual(len(self.messagesC), 0)
 
     def test2(self):
-        "Unsuccessful interaction between two nodes."        
-        self.B.request_interaction([self.A.public_key.key_to_bin(),
+        "Asynchronous interaction between two nodes."        
+        self.B.request_interaction([self.A.public_key.key_to_bin().encode('hex'),
                                     {'address': self.A.address}])
         self.A.handle_message(self.messagesA.pop())
-        self.C.request_interaction([self.A.public_key.key_to_bin(),
+        self.C.request_interaction([self.A.public_key.key_to_bin().encode('hex'),
                                     {'address': self.A.address}])
         self.A.handle_message(self.messagesA.pop())
         self.C.handle_message(self.messagesC.pop())
         self.B.handle_message(self.messagesB.pop())
-        self.C.request_interaction([self.A.public_key.key_to_bin(),
+        self.C.request_interaction([self.A.public_key.key_to_bin().encode('hex'),
                                     {'address': self.A.address}])
         self.A.handle_message(self.messagesA.pop())
         self.C.handle_message(self.messagesC.pop())
@@ -80,3 +80,24 @@ class TestAgent(unittest.TestCase):
         self.assertEqual(len(self.messagesA), 0)
         self.assertEqual(len(self.messagesB), 0)
         self.assertEqual(len(self.messagesC), 0)
+
+
+    def test3(self):
+        "Crawl does not add genesis block"
+        self.B.request_crawl([self.A.public_key.key_to_bin().encode('hex'),
+                              {'address': self.A.address}])
+        self.A.handle_message(self.messagesA.pop())
+        self.B.handle_message(self.messagesB.pop())
+        self.assertEqual(len(self.B.database._getall('', ())), 1)
+
+    def test4(self):
+        "Crawl does not add genesis block"
+        self.A.request_interaction([self.C.public_key.key_to_bin().encode('hex'),
+                                    {'address': self.C.address}])
+        self.C.handle_message(self.messagesC.pop())
+        self.A.handle_message(self.messagesA.pop())
+        self.B.request_crawl([self.A.public_key.key_to_bin().encode('hex'),
+                              {'address': self.A.address}])
+        self.A.handle_message(self.messagesA.pop())
+        self.B.handle_message(self.messagesB.pop())
+        self.assertEqual(len(self.B.database._getall('', ())), 3)
