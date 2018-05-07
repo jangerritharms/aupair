@@ -13,8 +13,8 @@ class MessageTypes(object):
     BLOCK_PAIR = 7
     CRAWL_REQUEST = 8
     CRAWL_REPLY = 9
-    CRAWL_BLOCK = 10
-    CRAWL_BLOCK = 11
+    PA_REQUEST = 10
+    PA_REPLY = 11
 
 class Message(object):
     """

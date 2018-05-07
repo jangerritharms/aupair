@@ -91,7 +91,7 @@ class TestAgent(unittest.TestCase):
         self.assertEqual(len(self.B.database._getall('', ())), 1)
 
     def test4(self):
-        "Crawl does not add genesis block"
+        "Crawl shares blocks successfully"
         self.A.request_interaction([self.C.public_key.key_to_bin().encode('hex'),
                                     {'address': self.C.address}])
         self.C.handle_message(self.messagesC.pop())
@@ -101,3 +101,31 @@ class TestAgent(unittest.TestCase):
         self.A.handle_message(self.messagesA.pop())
         self.B.handle_message(self.messagesB.pop())
         self.assertEqual(len(self.B.database._getall('', ())), 3)
+
+
+    # def test5(self):
+    #     "Audit shares all blocks"
+    #     self.A.request_audit
+
+    def test5(self):
+        "Difference calculation"
+        self.A.request_interaction([self.C.public_key.key_to_bin().encode('hex'),
+                                    {'address': self.C.address}])
+        self.C.handle_message(self.messagesC.pop())
+        self.A.handle_message(self.messagesA.pop())
+        dif = self.A.calculate_difference(self.B.database._getall('WHERE public_key = ?',
+                                                                  (buffer(self.B.public_key.key_to_bin()),)))
+        self.assertEqual(len(dif), [[self.A.public_key.key_to_bin(),[2]],
+                                    [self.C.public_key.key_to_bin(),[2]]])
+        
+
+    # def test6(self):
+    #     "Difference calculation"
+    #     self.A.request_interaction([self.C.public_key.key_to_bin().encode('hex'),
+    #                                 {'address': self.C.address}])
+    #     self.C.handle_message(self.messagesC.pop())
+    #     self.A.handle_message(self.messagesA.pop())
+    #     dif = self.A.calculate_difference(self.B.database._getall('WHERE public_key = ?',
+    #                                                               (buffer(self.B.public_key.key_to_bin()),)))
+    #     self.assertEqual(len(dif), 0)
+

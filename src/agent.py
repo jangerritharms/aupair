@@ -19,6 +19,7 @@ from src.pyipv8.ipv8.attestation.trustchain.database import TrustChainDB
 from src.pyipv8.ipv8.messaging.deprecated.encoding import encode
 from src.messages import Message, MessageTypes
 from src.database import Database
+from src.utils import create_index
 
 def spawn_agent(agent):
     """
@@ -89,6 +90,23 @@ class Agent(object):
         self.send(partner['address'], Message(MessageTypes.CRAWL_REQUEST,
                                               self.address).to_json())
 
+    def request_audit(self, partner = None):
+        """
+        Request audit request from the other node.
+        """
+        while partner is None or partner[1]['address'] == self.address:
+            partner = random.choice(self.agents)
+        partner = {'public_key': partner[0], 'address': partner[1]['address']}
+
+        blocks = self.database._getall('WHERE public_key = ?', self.public_key.key_to_bin())
+
+        list_of_packs = []
+        for block in blocks:
+            list_of_packs.append(block.pack().encode('base64'))
+
+        self.send(partner['address'], Message(MessageTypes.PA_REQUEST,
+                                              self.address,
+                                              list_of_packs).to_json())
 
     def get_agents(self):
         """
@@ -162,7 +180,7 @@ class Agent(object):
 
         elif msg['type'] == MessageTypes.CRAWL_REQUEST:
             blocks = self.database._getall('', ())
-            
+
             list_of_packs = []
             for block in blocks:
                 list_of_packs.append(block.pack().encode('base64'))
@@ -178,6 +196,42 @@ class Agent(object):
                 if block.previous_hash != GENESIS_HASH:
                     self.database.add_block(block)
 
+        elif msg['type'] == MessageTypes.PA_REQUEST:
+            list_of_packs = msg['payload']
+
+            chain = []
+            for pack in list_of_packs:
+                block = self.block_from_payload(pack)
+                chain.append(block)
+
+            self.validate_chain(chain)
+
+            self.calculate_difference(chain)
+
+            list_of_packs = []
+            for block in blocks:
+                list_of_packs.append(block.pack().encode('base64'))
+
+        elif msg['type'] == MessageTypes.PA_REPLY:
+            pass
+
+
+    def validate_chain(self, chain):
+        """
+        Checks the validity of a chain.
+        """
+        return True
+
+    def calculate_difference(self, other_chain):
+        """
+        Calculate the set of blocks that are in this agents chain but not the partner's and return 
+        them as a list.
+        """
+        own_chain = [item for block in self.database._getall('', ()) if block.public_key == self.public_key.key_to_bin()]
+        own_index = create_index(own_chain, self.public_key.key_to_bin())
+        other_index = create_index(other_chain, other_chain[0].public_key)
+
+        return calculate_difference(own_index, other_index)
 
     def register(self):
         """
