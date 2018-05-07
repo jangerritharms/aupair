@@ -19,7 +19,7 @@ from src.pyipv8.ipv8.attestation.trustchain.database import TrustChainDB
 from src.pyipv8.ipv8.messaging.deprecated.encoding import encode
 from src.messages import Message, MessageTypes
 from src.database import Database
-from src.utils import create_index
+from src.utils import create_index_from_chain, create_index_from_blocks, calculate_difference
 
 def spawn_agent(agent):
     """
@@ -98,7 +98,7 @@ class Agent(object):
             partner = random.choice(self.agents)
         partner = {'public_key': partner[0], 'address': partner[1]['address']}
 
-        blocks = self.database._getall('WHERE public_key = ?', self.public_key.key_to_bin())
+        blocks = self.database._getall('WHERE public_key = ?', (buffer(self.public_key.key_to_bin()),))
 
         list_of_packs = []
         for block in blocks:
@@ -173,10 +173,24 @@ class Agent(object):
                                              self.address,
                                              new_block.pack().encode('base64')).to_json())
 
+            new_block = TrustChainBlock.create({"transfer_down": [[block.public_key, [block.sequence_number]]]},
+                                               self.database,
+                                               str(self.public_key.key_to_bin()),
+                                               link_pk=block.public_key)
+            new_block.sign(self.private_key)
+            self.database.add_block(new_block)
+            
+
         elif msg['type'] == MessageTypes.BLOCK_REPLY:
             block = self.block_from_payload(msg['payload'])
 
             self.database.add_block(block)
+            new_block = TrustChainBlock.create({"transfer_down": [[block.public_key, [block.sequence_number]]]},
+                                               self.database,
+                                               str(self.public_key.key_to_bin()),
+                                               link_pk=block.public_key)
+            new_block.sign(self.private_key)
+            self.database.add_block(new_block)
 
         elif msg['type'] == MessageTypes.CRAWL_REQUEST:
             blocks = self.database._getall('', ())
@@ -201,19 +215,99 @@ class Agent(object):
 
             chain = []
             for pack in list_of_packs:
+                print pack
                 block = self.block_from_payload(pack)
                 chain.append(block)
 
             self.validate_chain(chain)
 
-            self.calculate_difference(chain)
+            blocks = self.calculate_difference(chain)
 
             list_of_packs = []
             for block in blocks:
                 list_of_packs.append(block.pack().encode('base64'))
 
+            blocks = self.database._getall('WHERE public_key = ?',
+                                           (buffer(self.public_key.key_to_bin()),))
+
+            list_of_chain = []
+            for block in blocks:
+                list_of_chain.append(block.pack().encode('base64'))
+
+            self.send(msg['sender'], Message(MessageTypes.PA_REPLY,
+                                             self.address,
+                                             [list_of_packs, list_of_chain]).to_json())
+
         elif msg['type'] == MessageTypes.PA_REPLY:
-            pass
+            list_of_packs_and_chain = msg['payload']
+
+            transfer = []
+            for pack in list_of_packs_and_chain[0]:
+                block = self.block_from_payload(pack)
+                self.database.add_block(block)
+                transfer.append(block)
+
+            chain = []
+            for pack in list_of_packs_and_chain[1]:
+                block = self.block_from_payload(pack)
+                chain.append(block)
+
+            self.validate_chain(chain)
+            blocks = self.calculate_difference(chain)
+            new_block = TrustChainBlock.create({'transfer_up': create_index_from_blocks(blocks),
+                                            'transfer_down': create_index_from_blocks(transfer)},
+                                           self.database,
+                                           self.public_key.key_to_bin(),
+                                           link_pk = chain[0].public_key)
+            new_block.sign(self.private_key)
+            self.database.add_block(new_block)
+
+            list_of_packs = []
+            for block in blocks:
+                list_of_packs.append(block.pack().encode('base64'))
+
+            self.send(msg['sender'], Message(MessageTypes.PA_BLOCK_PROPOSAL,
+                                             self.address,
+                                             [new_block.pack().encode('base64'), list_of_packs]).to_json())
+        elif msg['type'] == MessageTypes.PA_BLOCK_PROPOSAL:
+            list_of_packs_and_block = msg['payload']
+
+            transfer = []
+            for pack in list_of_packs_and_block[1]:
+                block = self.block_from_payload(pack)
+                self.database.add_block(block)
+                transfer.append(block)
+
+            block = self.block_from_payload(list_of_packs_and_block[0])
+            
+            new_block = TrustChainBlock.create(None,
+                                               self.database,
+                                               str(self.public_key.key_to_bin()),
+                                               link=block)
+            new_block.sign(self.private_key)
+            self.database.add_block(block)
+            self.database.add_block(new_block)
+            self.send(msg['sender'], Message(MessageTypes.PA_BLOCK_ACCEPT,
+                                             self.address,
+                                             new_block.pack().encode('base64')).to_json())
+            new_block = TrustChainBlock.create({"transfer_down": [[block.public_key, [block.sequence_number]]]},
+                                               self.database,
+                                               str(self.public_key.key_to_bin()),
+                                               link_pk=block.public_key)
+            new_block.sign(self.private_key)
+            self.database.add_block(new_block)
+
+        elif msg['type'] == MessageTypes.PA_BLOCK_ACCEPT:
+            block = self.block_from_payload(msg['payload'])
+
+            self.database.add_block(block)
+            new_block = TrustChainBlock.create({"transfer_down": [[block.public_key, [block.sequence_number]]]},
+                                               self.database,
+                                               str(self.public_key.key_to_bin()),
+                                               link_pk=block.public_key)
+            new_block.sign(self.private_key)
+            self.database.add_block(new_block)
+
 
 
     def validate_chain(self, chain):
@@ -227,11 +321,18 @@ class Agent(object):
         Calculate the set of blocks that are in this agents chain but not the partner's and return 
         them as a list.
         """
-        own_chain = [item for block in self.database._getall('', ()) if block.public_key == self.public_key.key_to_bin()]
-        own_index = create_index(own_chain, self.public_key.key_to_bin())
-        other_index = create_index(other_chain, other_chain[0].public_key)
+        own_chain = self.database._getall('WHERE public_key = ?',
+                                          (buffer(self.public_key.key_to_bin()),))
+        own_index = create_index_from_chain(own_chain, self.public_key.key_to_bin())
+        other_index = create_index_from_chain(other_chain, other_chain[0].public_key)
 
-        return calculate_difference(own_index, other_index)
+        diff = calculate_difference(own_index, other_index)
+
+        blocks = []
+        for elem in diff:
+            blocks.extend(self.database._getall('WHERE public_key = ? AND sequence_number IN (%s)' % ', '.join((str(seq) for seq in elem[1])),
+                                                (buffer(elem[0]),)))
+        return blocks
 
     def register(self):
         """

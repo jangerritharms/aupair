@@ -3,7 +3,7 @@ This module contains some helping functions which are not part of a class.
 """
 from src.pyipv8.ipv8.attestation.trustchain.block import UNKNOWN_SEQ
 
-def create_index(chain, public_key):
+def create_index_from_chain(chain, public_key):
     """
     Takes the full trustchain of an agent and creates an index in the format:
     [[public_key1, [seq1, seq2,...]][public_key2, [seq1, seq2,...]],...]
@@ -14,7 +14,7 @@ def create_index(chain, public_key):
             index_dict.setdefault(public_key, []).append(block.sequence_number)
         else:
             index_dict.setdefault(block.public_key, []).append(block.sequence_number)
-            if block.transaction.get('transfer_up'):
+            if block.transaction.get('transfer_up') or block.transaction.get('transfer_down'):
                 transfer = {}
                 if block.link_sequence_number != UNKNOWN_SEQ:
                     transfer = block.transaction['transfer_up']
@@ -22,6 +22,16 @@ def create_index(chain, public_key):
                     transfer = block.transaction['transfer_down']
                 for elem in transfer:
                     index_dict.setdefault(elem[0], []).extend(elem[1])
+
+    return [list(elem) for elem in index_dict.items()]
+
+def create_index_from_blocks(blocks):
+    """
+    Takes a set of blocks and creates an index.
+    """
+    index_dict = {}
+    for block in blocks:
+        index_dict.setdefault(block.public_key, []).append(block.sequence_number)
 
     return [list(elem) for elem in index_dict.items()]
 

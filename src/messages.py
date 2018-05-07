@@ -15,6 +15,8 @@ class MessageTypes(object):
     CRAWL_REPLY = 9
     PA_REQUEST = 10
     PA_REPLY = 11
+    PA_BLOCK_PROPOSAL = 12
+    PA_BLOCK_ACCEPT = 13
 
 class Message(object):
     """

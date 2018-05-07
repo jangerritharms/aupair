@@ -6,7 +6,7 @@ import json
 from src.pyipv8.ipv8.keyvault.crypto import ECCrypto
 from src.pyipv8.ipv8.messaging.deprecated.encoding import encode
 from src.pyipv8.ipv8.attestation.trustchain.block import TrustChainBlock, UNKNOWN_SEQ, EMPTY_SIG, GENESIS_HASH
-from src.utils import create_index, calculate_difference
+from src.utils import create_index_from_chain, create_index_from_blocks, calculate_difference
 from src.agent import Agent
 
 TEST_OPTIONS = {
@@ -99,7 +99,7 @@ class TestUtil(unittest.TestCase):
 
     def test1(self):
         "Creates the correct index for agent A."
-        index = create_index(self.chain, self.key_A)
+        index = create_index_from_chain(self.chain, self.key_A)
         
         self.assertTrue([self.key_A, [1, 2, 3, 4]] in index)
         self.assertTrue([self.key_B, [2, 3, 4, 5, 6]] in index)
@@ -126,3 +126,9 @@ class TestUtil(unittest.TestCase):
         self.assertTrue([self.key_B, [1, 7]] in difference)
         self.assertTrue([self.key_C, [1, 2, 3]] in difference)
 
+    def test4(self):
+        "Creates index from blocks."
+        index = create_index_from_blocks(self.database)
+
+        self.assertTrue([self.key_A, [2, 3, 4]] in index)
+        self.assertTrue([self.key_B, [2, 3, 5]] in index)
