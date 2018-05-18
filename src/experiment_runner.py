@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from multiprocessing import Process
 
 import src.analysis.agent
-from src.agent import Agent, spawn_agent
+from src.agent import Agent
 from src.discovery import DiscoveryServer, spawn_discovery_server
 
 from src.pyipv8.ipv8.attestation.trustchain.database import TrustChainDB
@@ -50,8 +50,18 @@ class ExperimentRunner(object):
         for db_file in files:
             agent = src.analysis.agent.Agent.from_file(os.path.join('data', db_file))
             agents.append(agent)
-        
-        plt.plot(range(len(agents)), [agent.size_database() for agent in agents])
+
+        stack = [[agent.transactions_blocks() for agent in agents],
+                 [agent.exchange_blocks() for agent in agents],
+                 [agent.foreign_blocks() for agent in agents]]
+        plt.stackplot(range(len(agents)),
+                      *stack,
+                      labels=['transactions', 'exchange', 'foreign'],
+                      baseline='zero')
+        plt.title('Database view')
+        plt.xlabel('Agent')
+        plt.ylabel('Number of blocks')
+        plt.legend(loc=2)
         plt.show()
 
 
@@ -89,10 +99,17 @@ class ExperimentRunner(object):
             agent = Agent()
             next_port = self.options['node_port_range_begin'] + len(self.agent_processes)
             agent.configure(self.options, next_port)
-            agent_process = Process(target=spawn_agent, args=(agent, ))
+            agent_process = Process(target=agent.run)
             agent_process.start()
             self.agent_processes.append(agent_process)
 
+        for _ in range(self.options['dishonest_nodes']):
+            agent = Agent()
+            next_port = self.options['node_port_range_begin'] + len(self.agent_processes)
+            agent.configure(self.options, next_port)
+            agent_process = Process(target=agent.run, args=(True, ))
+            agent_process.start()
+            self.agent_processes.append(agent_process)
 
         for process in self.agent_processes:
             process.join()

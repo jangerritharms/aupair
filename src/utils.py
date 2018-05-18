@@ -23,7 +23,7 @@ def create_index_from_chain(chain, public_key):
                 for elem in transfer:
                     index_dict.setdefault(elem[0], []).extend(elem[1])
 
-    return [list(elem) for elem in index_dict.items()]
+    return [[elem[0], sorted(list(set(elem[1])))] for elem in index_dict.items()]
 
 def create_index_from_blocks(blocks):
     """
@@ -33,7 +33,7 @@ def create_index_from_blocks(blocks):
     for block in blocks:
         index_dict.setdefault(block.public_key, []).append(block.sequence_number)
 
-    return [list(elem) for elem in index_dict.items()]
+    return [[elem[0], sorted(list(set(elem[1])))] for elem in index_dict.items()]
 
 def calculate_difference(own_index, other_index):
     """
