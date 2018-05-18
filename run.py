@@ -15,6 +15,9 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
+        'command'
+    )
+    parser.add_argument(
         '--config',
         type=argparse.FileType('r'),
         help='The experiment configuration file.'
@@ -23,8 +26,11 @@ def main():
     args = parser.parse_args()
 
     runner = ExperimentRunner()
-    runner.load_configuration(args.config)
-    runner.run()
+    if args.command == 'execute':
+        runner.load_configuration(args.config)
+        runner.run()
+    elif args.command == 'analyze':
+        runner.analysis()
 
 
 
