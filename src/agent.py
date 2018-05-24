@@ -20,12 +20,14 @@ from src.pyipv8.ipv8.attestation.trustchain.payload import HalfBlockPayload, Hal
 from src.pyipv8.ipv8.attestation.trustchain.database import TrustChainDB
 from src.pyipv8.ipv8.messaging.deprecated.encoding import encode
 from src.pyipv8.ipv8.database import sqlite3
-from src.messages import Message, MessageTypes
+from src.communication.messages import Message, MessageTypes
 from src.database import Database
 from src.utils import create_index_from_chain, create_index_from_blocks, calculate_difference
+from src.communication.messaging import MessageProcessor, MessageHandler
+from src.communication.interface import CommunicationInterface
 
 
-class Agent(object):
+class Agent(MessageProcessor):
     """
     Agents are the entities in the network that perform interactions. An agent
     is identified by its public key.
@@ -49,6 +51,7 @@ class Agent(object):
         self.loop = None
         self.database = None
         self.agents = []
+        self.com = CommunicationInterface()
         self.serializer = Serializer()
 
         self.private_key = ECCrypto().generate_key('curve25519')
@@ -72,14 +75,13 @@ class Agent(object):
         """
         self.emulation_duration = options['emulation_duration']
         self.emulation_step_length = options['emulation_step_length']
-        self.port = port
         self.discovery_address = 'tcp://localhost:' + str(options['discovery_server_port'])
         self.database = TrustChainDB('', 'db_'+ str(port))
         genesis_block = TrustChainBlock()
         genesis_block.public_key = str(self.public_key.key_to_bin())
         self.database.add_block(genesis_block)
 
-        self.address = 'tcp://127.0.0.1:'+ str(self.port)
+        self.com.configure(port)
 
         self.crawling = options['enable_crawling']
         self.syncing = options['enable_syncing']
@@ -121,8 +123,7 @@ class Agent(object):
         logging.debug('%s adding block %s', self.address, new_block)
         self.database.add_block(new_block)
         self.send(partner['address'], Message(MessageTypes.BLOCK,
-                                              self.address,
-                                              new_block.pack().encode('base64')).to_json())
+                                              new_block.pack().encode('base64')))
         logging.debug('%s requesting interaction with %s', self.address, partner['address'], extra={'address': self.address})
 
     def request_crawl(self, partner=None):
@@ -132,8 +133,7 @@ class Agent(object):
         while partner is None or partner[1]['address'] == self.address:
             partner = random.choice(self.agents)
         partner = {'public_key': partner[0], 'address': partner[1]['address']}
-        self.send(partner['address'], Message(MessageTypes.CRAWL_REQUEST,
-                                              self.address).to_json())
+        self.send(partner['address'], Message(MessageTypes.CRAWL_REQUEST))
 
     def request_audit(self, partner=None):
         """
@@ -151,16 +151,14 @@ class Agent(object):
 
         logging.debug('%s requesting audit from %s', self.address, partner['address'])
         self.send(partner['address'], Message(MessageTypes.PA_REQUEST,
-                                              self.address,
-                                              list_of_packs).to_json())
+                                              list_of_packs))
 
     def get_agents(self):
         """
         Selects the next interaction partner.
         """
         logging.debug('Getting agents', extra={'address': self.address})
-        self.send(self.discovery_address, Message(MessageTypes.AGENT_REQUEST,
-                                                  self.address).to_json())
+        self.send(self.discovery_address, Message(MessageTypes.AGENT_REQUEST))
 
     def block_from_payload(self, payload):
         """
@@ -180,202 +178,181 @@ class Agent(object):
         payload = HalfBlockPairPayload.from_unpack_list(*unpacked_list[0][0])
         return TrustChainBlock.from_pair_payload(payload, self.serializer)
 
-    def handle_message(self, message):
-        """
-        Handle messages received from other agents.
-        """
-        msg = json.loads(message[0].decode('string-escape').strip('"'))
-        if msg['type'] == MessageTypes.AGENT_REPLY:
-            self.agents = msg['payload']
+    @MessageHandler(MessageTypes.AGENT_REPLY)
+    def set_agents(self, sender, agents):
+        self.agents = agents
 
-        elif msg['type'] == MessageTypes.BLOCK:
-            block = self.block_from_payload(msg['payload'])
-            new_block = TrustChainBlock.create(None,
-                                               self.database,
-                                               str(self.public_key.key_to_bin()),
-                                               link=block)
-            new_block.sign(self.private_key)
+    @MessageHandler(MessageTypes.BLOCK)
+    def block_proposal(self, sender, payload):
+        block = self.block_from_payload(payload)
+        new_block = TrustChainBlock.create(None,
+                                            self.database,
+                                            str(self.public_key.key_to_bin()),
+                                            link=block)
+        new_block.sign(self.private_key)
+
+        try:
+            self.database.add_block(block)
+        except sqlite3.IntegrityError:
+            logging.warning('%s Error adding block %s', self.address, block)
+        self.database.add_block(new_block)
+        self.send(sender, Message(MessageTypes.BLOCK_REPLY,
+                                            new_block.pack().encode('base64')))
+
+    @MessageHandler(MessageTypes.BLOCK_REPLY)
+    def block_confirm(self, sender, payload):
+        block = self.block_from_payload(payload)
+
+        try:
+            self.database.add_block(block)
             logging.debug('%s adding block %s', self.address, block)
-            logging.debug('%s adding block %s', self.address, new_block)
-            try:
-                self.database.add_block(block)
-            except sqlite3.IntegrityError:
-                logging.warning('%s Error adding block %s', self.address, block)
-            self.database.add_block(new_block)
-            self.send(msg['sender'], Message(MessageTypes.BLOCK_REPLY,
-                                             self.address,
-                                             new_block.pack().encode('base64')).to_json())
+        except sqlite3.IntegrityError:
+            logging.warning('%s Error adding block %s', self.address, block)
 
-            if self.syncing:
-                new_block = TrustChainBlock.create({"transfer_down": [[block.public_key, [block.sequence_number]]]},
-                                                   self.database,
-                                                   str(self.public_key.key_to_bin()),
-                                                   link_pk=block.public_key)
-                new_block.sign(self.private_key)
-                logging.debug('%s adding block %s', self.address, new_block)
-                self.database.add_block(new_block)
-            
+    @MessageHandler(MessageTypes.CRAWL_REQUEST)
+    def crawl_request_handler(self, sender, payload):
+        blocks = self.database._getall('WHERE public_key = ?',
+                                        (buffer(self.public_key.key_to_bin()),))
 
-        elif msg['type'] == MessageTypes.BLOCK_REPLY:
-            block = self.block_from_payload(msg['payload'])
+        list_of_packs = []
+        for block in blocks:
+            list_of_packs.append(block.pack().encode('base64'))
 
-            try:
-                self.database.add_block(block)
-                logging.debug('%s adding block %s', self.address, block)
-            except sqlite3.IntegrityError:
-                logging.warning('%s Error adding block %s', self.address, block)
+        self.send(sender, Message(MessageTypes.CRAWL_REPLY,
+                                            list_of_packs))
 
-            if self.syncing:
-                new_block = TrustChainBlock.create({"transfer_down": [[block.public_key, [block.sequence_number]]]},
-                                                   self.database,
-                                                   str(self.public_key.key_to_bin()),
-                                                   link_pk=block.public_key)
-                new_block.sign(self.private_key)
-                logging.debug('%s adding block %s', self.address, new_block)
-                self.database.add_block(new_block)
-
-                self.request_audit([block.public_key, {'address': msg['sender']}])
-
-        elif msg['type'] == MessageTypes.CRAWL_REQUEST:
-            blocks = self.database._getall('WHERE public_key = ?',
-                                           (buffer(self.public_key.key_to_bin()),))
-
-            list_of_packs = []
-            for block in blocks:
-                list_of_packs.append(block.pack().encode('base64'))
-
-            self.send(msg['sender'], Message(MessageTypes.CRAWL_REPLY,
-                                             self.address,
-                                             list_of_packs).to_json())
-
-        elif msg['type'] == MessageTypes.CRAWL_REPLY:
-            list_of_packs = msg['payload']
-            for pack in list_of_packs:
-                block = self.block_from_payload(pack)
-                if block.previous_hash != GENESIS_HASH:
-                    # Some of the crawled blocks may already be in the database.
-                    try:
-                        logging.debug('%s adding block %s', self.address, block)
-                        self.database.add_block(block)
-                    except:
-                        pass
-
-        elif msg['type'] == MessageTypes.PA_REQUEST:
-            logging.debug('%s received audit request from %s', self.address, msg['sender'])
-            list_of_packs = msg['payload']
-
-            chain = []
-            for pack in list_of_packs:
-                block = self.block_from_payload(pack)
-                chain.append(block)
-
-            self.validate_chain(chain)
-
-            blocks = self.calculate_difference(chain)
-
-            list_of_packs = []
-            for block in blocks:
-                list_of_packs.append(block.pack().encode('base64'))
-
-            blocks = self.database._getall('WHERE public_key = ?',
-                                           (buffer(self.public_key.key_to_bin()),))
-
-            list_of_chain = []
-            for block in blocks:
-                list_of_chain.append(block.pack().encode('base64'))
-
-            self.send(msg['sender'], Message(MessageTypes.PA_REPLY,
-                                             self.address,
-                                             [list_of_packs, list_of_chain]).to_json())
-
-        elif msg['type'] == MessageTypes.PA_REPLY:
-            logging.debug('%s received audit reply from %s', self.address, msg['sender'])
-            list_of_packs_and_chain = msg['payload']
-
-            transfer = []
-            for pack in list_of_packs_and_chain[0]:
-                block = self.block_from_payload(pack)
+    @MessageHandler(MessageTypes.CRAWL_REPLY)
+    def crawl_reply_handler(self, sender, payload):
+        list_of_packs = payload
+        for pack in list_of_packs:
+            block = self.block_from_payload(pack)
+            if block.previous_hash != GENESIS_HASH:
+                # Some of the crawled blocks may already be in the database.
                 try:
                     logging.debug('%s adding block %s', self.address, block)
                     self.database.add_block(block)
-                except sqlite3.IntegrityError:
-                    logging.warning('%s Error adding block %s', self.address, block)
-                    existing = self.database.get(block.public_key, block.sequence_number)
-                    if existing.hash != block.hash:
-                        logging.warning('DOUBLE SPENDING DETECTED after %d seconds', self.start_time - time.time())
-                transfer.append(block)
+                except:
+                    pass
 
-            chain = []
-            for pack in list_of_packs_and_chain[1]:
-                block = self.block_from_payload(pack)
-                chain.append(block)
+    @MessageHandler(MessageTypes.PA_REQUEST)
+    def audit_request_handler(self, sender, payload):
+        logging.debug('%s received audit request from %s', self.address, sender)
+        list_of_packs = payload
 
-            self.validate_chain(chain)
-            blocks = self.calculate_difference(chain)
-            new_block = TrustChainBlock.create({'transfer_up': create_index_from_blocks(blocks),
-                                                'transfer_down': create_index_from_blocks(transfer)},
-                                               self.database,
-                                               self.public_key.key_to_bin(),
-                                               link_pk=chain[0].public_key)
-            new_block.sign(self.private_key)
-            logging.debug('%s adding block %s', self.address, new_block)
-            self.database.add_block(new_block)
+        chain = []
+        for pack in list_of_packs:
+            block = self.block_from_payload(pack)
+            chain.append(block)
 
-            list_of_packs = []
-            for block in blocks:
-                list_of_packs.append(block.pack().encode('base64'))
+        self.validate_chain(chain)
 
-            self.send(msg['sender'], Message(MessageTypes.PA_BLOCK_PROPOSAL,
-                                             self.address,
-                                             [new_block.pack().encode('base64'), list_of_packs]).to_json())
-        elif msg['type'] == MessageTypes.PA_BLOCK_PROPOSAL:
-            list_of_packs_and_block = msg['payload']
+        blocks = self.calculate_difference(chain)
 
-            transfer = []
-            for pack in list_of_packs_and_block[1]:
-                block = self.block_from_payload(pack)
-                try:
-                    self.database.add_block(block)
-                except sqlite3.IntegrityError:
-                    logging.warning('%s Error adding block %s', self.address, block)
-                    existing = self.database.get(block.public_key, block.sequence_number)
-                    if existing.hash != block.hash:
-                        logging.warning('DOUBLE SPENDING DETECTED after %d seconds', self.start_time - time.time())
-                transfer.append(block)
+        list_of_packs = []
+        for block in blocks:
+            list_of_packs.append(block.pack().encode('base64'))
 
-            block = self.block_from_payload(list_of_packs_and_block[0])
-            self.database.add_block(block)
-            
-            new_block = TrustChainBlock.create(None,
-                                               self.database,
-                                               str(self.public_key.key_to_bin()),
-                                               link=block)
-            new_block.sign(self.private_key)
-            logging.debug('%s adding block %s', self.address, block)
-            self.database.add_block(new_block)
-            self.send(msg['sender'], Message(MessageTypes.PA_BLOCK_ACCEPT,
-                                             self.address,
-                                             new_block.pack().encode('base64')).to_json())
-            new_block = TrustChainBlock.create({"transfer_down": [[block.public_key, [block.sequence_number]]]},
-                                               self.database,
-                                               str(self.public_key.key_to_bin()),
-                                               link_pk=block.public_key)
-            new_block.sign(self.private_key)
-            logging.debug('%s adding block %s', self.address, new_block)
-            self.database.add_block(new_block)
+        blocks = self.database._getall('WHERE public_key = ?',
+                                        (buffer(self.public_key.key_to_bin()),))
 
-        elif msg['type'] == MessageTypes.PA_BLOCK_ACCEPT:
-            block = self.block_from_payload(msg['payload'])
+        list_of_chain = []
+        for block in blocks:
+            list_of_chain.append(block.pack().encode('base64'))
 
-            logging.debug('%s adding block %s', self.address, block)
-            self.database.add_block(block)
-            new_block = TrustChainBlock.create({"transfer_down": [[block.public_key, [block.sequence_number]]]},
-                                               self.database,
-                                               str(self.public_key.key_to_bin()),
-                                               link_pk=block.public_key)
-            new_block.sign(self.private_key)
-            logging.debug('%s adding block %s', self.address, new_block)
-            self.database.add_block(new_block)
+        self.send(sender, Message(MessageTypes.PA_REPLY,
+                                         [list_of_packs, list_of_chain]))
+
+    @MessageHandler(MessageTypes.PA_REPLY)
+    def audit_reply_handler(self, sender, payload):
+        logging.debug('%s received audit reply from %s', self.address, sender)
+        list_of_packs_and_chain = payload
+
+        transfer = []
+        for pack in list_of_packs_and_chain[0]:
+            block = self.block_from_payload(pack)
+            try:
+                logging.debug('%s adding block %s', self.address, block)
+                self.database.add_block(block)
+            except sqlite3.IntegrityError:
+                logging.warning('%s Error adding block %s', self.address, block)
+                existing = self.database.get(block.public_key, block.sequence_number)
+                if existing.hash != block.hash:
+                    logging.warning('DOUBLE SPENDING DETECTED after %d seconds', self.start_time - time.time())
+            transfer.append(block)
+
+        chain = []
+        for pack in list_of_packs_and_chain[1]:
+            block = self.block_from_payload(pack)
+            chain.append(block)
+
+        self.validate_chain(chain)
+        blocks = self.calculate_difference(chain)
+        new_block = TrustChainBlock.create({'transfer_up': create_index_from_blocks(blocks),
+                                            'transfer_down': create_index_from_blocks(transfer)},
+                                            self.database,
+                                            self.public_key.key_to_bin(),
+                                            link_pk=chain[0].public_key)
+        new_block.sign(self.private_key)
+        logging.debug('%s adding block %s', self.address, new_block)
+        self.database.add_block(new_block)
+
+        list_of_packs = []
+        for block in blocks:
+            list_of_packs.append(block.pack().encode('base64'))
+
+        self.send(sender, Message(MessageTypes.PA_BLOCK_PROPOSAL,
+                                         [new_block.pack().encode('base64'),list_of_packs]))
+
+    @MessageHandler(MessageTypes.PA_BLOCK_PROPOSAL)
+    def audit_block_handler(self, sender, payload):
+        list_of_packs_and_block = payload
+
+        transfer = []
+        for pack in list_of_packs_and_block[1]:
+            block = self.block_from_payload(pack)
+            try:
+                self.database.add_block(block)
+            except sqlite3.IntegrityError:
+                logging.warning('%s Error adding block %s', self.address, block)
+                existing = self.database.get(block.public_key, block.sequence_number)
+                if existing.hash != block.hash:
+                    logging.warning('DOUBLE SPENDING DETECTED after %d seconds', self.start_time - time.time())
+            transfer.append(block)
+
+        block = self.block_from_payload(list_of_packs_and_block[0])
+        self.database.add_block(block)
+        
+        new_block = TrustChainBlock.create(None,
+                                            self.database,
+                                            str(self.public_key.key_to_bin()),
+                                            link=block)
+        new_block.sign(self.private_key)
+        logging.debug('%s adding block %s', self.address, block)
+        self.database.add_block(new_block)
+        self.send(sender, Message(MessageTypes.PA_BLOCK_ACCEPT,
+                                         new_block.pack().encode('base64')))
+        new_block = TrustChainBlock.create({"transfer_down": [[block.public_key, [block.sequence_number]]]},
+                                            self.database,
+                                            str(self.public_key.key_to_bin()),
+                                            link_pk=block.public_key)
+        new_block.sign(self.private_key)
+        logging.debug('%s adding block %s', self.address, new_block)
+        self.database.add_block(new_block)
+
+    @MessageHandler(MessageTypes.PA_BLOCK_ACCEPT)
+    def audit_confirm_handler(self, sender, payload):
+        block = self.block_from_payload(payload)
+
+        logging.debug('%s adding block %s', self.address, block)
+        self.database.add_block(block)
+        new_block = TrustChainBlock.create({"transfer_down": [[block.public_key, [block.sequence_number]]]},
+                                            self.database,
+                                            str(self.public_key.key_to_bin()),
+                                            link_pk=block.public_key)
+        new_block.sign(self.private_key)
+        logging.debug('%s adding block %s', self.address, new_block)
+        self.database.add_block(new_block)
+
 
     def validate_chain(self, chain):
         """
@@ -407,8 +384,7 @@ class Agent(object):
         """
         self.send(self.discovery_address,
                   Message(MessageTypes.REGISTER,
-                          self.address,
-                          {'public_key': self.public_key.key_to_bin().encode('hex')}).to_json())
+                          {'public_key': self.public_key.key_to_bin().encode('hex')}))
 
     def unregister(self):
         """
@@ -416,8 +392,7 @@ class Agent(object):
         """
         self.send(self.discovery_address,
                   Message(MessageTypes.UNREGISTER,
-                          self.address,
-                          self.public_key.key_to_bin().encode('hex')).to_json())
+                          self.public_key.key_to_bin().encode('hex')))
         time.sleep(1)
         self.loop.stop()
 
@@ -441,9 +416,7 @@ class Agent(object):
         """
         Send a message using the sending device.
         """
-        self.sender.connect(address)
-        self.sender.send_json(message)
-        self.sender.disconnect(address)
+        self.com.send(address, message)
 
     def write_data(self):
         """
@@ -480,15 +453,8 @@ class Agent(object):
         Starts the main loop of the agent.
         """
         self.dishonest = dishonest
-        self.context = zmq.Context()
-        self.sender = self.context.socket(zmq.PUSH) # pylint: disable=no-member
-        self.receiver = self.context.socket(zmq.PULL) # pylint: disable=no-member
 
-        logging.debug('Starting agent at port %d', self.port, extra={'address': self.address})
-
-        self.receiver.bind(self.address)
-        stream = ZMQStream(self.receiver)
-        stream.on_recv(self.handle_message)
+        self.com.start(self.handle)
 
         self.register()
 

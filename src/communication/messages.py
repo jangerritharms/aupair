@@ -23,13 +23,24 @@ class Message(object):
     Message class defining an exchange of data between two agents.
     """
 
-    def __init__(self, message_type, sender, payload=None):
+    def __init__(self, message_type, payload=None, sender=None):
         """
         Creates a message of given type and with the given payload.
         """
 
         self.type = message_type
         self.payload = payload
+        self.sender = None
+
+    def set_sender(self, sender):
+        """Usually we would like to set the sender separate from the content.
+        This function sets the origin of the message which can be useful for the
+        replying agent.
+        
+        Arguments:
+            sender {string} -- Address string of the receiving device of the 
+                               sending agent.
+        """
         self.sender = sender
 
     def to_json(self):
