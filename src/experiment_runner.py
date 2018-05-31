@@ -8,10 +8,11 @@ import matplotlib.pyplot as plt
 from multiprocessing import Process
 
 import src.analysis.agent
-from src.agent import Agent
+from src.agent.base import BaseAgent
 from src.discovery import DiscoveryServer, spawn_discovery_server
 
 from src.pyipv8.ipv8.attestation.trustchain.database import TrustChainDB
+
 
 class ExperimentRunner(object):
     """
@@ -64,7 +65,6 @@ class ExperimentRunner(object):
         plt.legend(loc=2)
         plt.show()
 
-
     def run(self):
         """
         Starts the discovery server and all agent processes. Then waits until
@@ -96,9 +96,9 @@ class ExperimentRunner(object):
         discovery_process.start()
 
         for _ in range(self.options['honest_nodes']):
-            agent = Agent()
+            agent = BaseAgent()
             next_port = self.options['node_port_range_begin'] + len(self.agent_processes)
-            agent.configure(self.options, next_port)
+            agent.setup(self.options, next_port)
             agent_process = Process(target=agent.run)
             agent_process.start()
             self.agent_processes.append(agent_process)
