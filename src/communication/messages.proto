@@ -5,6 +5,8 @@ enum Type {
     AGENT_REPLY = 2;
     AGENT_REQUEST = 3;
     UNREGISTER = 4;
+    BLOCK_PROPOSAL = 5;
+    BLOCK_AGREEMENT = 6;
 }
 
 message Empty {}
@@ -35,5 +37,22 @@ message WrapperMessage{
         Register register = 11;
         AgentReply agent_reply = 12;
         Unregister unregister = 13;
+        Block block = 14;
     }
+}
+
+message Block {
+    required bytes payload = 1;
+    required bytes public_key = 2;
+    required int32 sequence_number = 3;
+    required bytes link_public_key = 4;
+    required int32 link_sequence_number = 5;
+    required bytes previous_hash = 6;
+    required bytes signature = 7;
+    optional bytes hash = 8;
+}
+
+message Database {
+    required AgentInfo info = 1;
+    repeated Block blocks = 2;
 }

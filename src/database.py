@@ -5,6 +5,8 @@ import logging
 
 from src.pyipv8.ipv8.database import sqlite3
 from src.pyipv8.ipv8.attestation.trustchain.database import TrustChainDB
+from src.chain.block import Block
+
 
 class Database(TrustChainDB):
     """An extension of the general TrustChainDB database interface. This class provides additional
@@ -16,6 +18,10 @@ class Database(TrustChainDB):
         Initializes new database.
         """
         super(Database, self).__init__(*args)
+
+    def _getall(self, *args, **kwargs):
+        trust_chain_blocks = super(Database, self)._getall(*args, **kwargs)
+        return [Block.convert_to_Block(block) for block in trust_chain_blocks]
 
     def add(self, block, check_double_spend=False):
         """
@@ -41,7 +47,7 @@ class Database(TrustChainDB):
         Returns:
             {[TrustChainBlock]} -- List of blocks, ordered by sequence number.
         """
-        return self.database._getall('WHERE public_key = ?', (key.as_buffer(),))
+        return self._getall('WHERE public_key = ?', (key.as_buffer(),))
 
     def delete(self, key, sequence_begin, sequence_length=1):
         """Deletes a sequence of blocks from the database. This can be used as a simple way to 

@@ -8,12 +8,13 @@ from tornado import ioloop
 import src.communication.messages_pb2 as msg
 
 from src.pyipv8.ipv8.keyvault.crypto import ECCrypto
-from src.pyipv8.ipv8.attestation.trustchain.payload import HalfBlockPayload, HalfBlockPairPayload
+from src.pyipv8.ipv8.attestation.trustchain.payload import HalfBlockPairPayload
 from src.pyipv8.ipv8.messaging.serialization import Serializer
 from src.pyipv8.ipv8.attestation.trustchain.block import TrustChainBlock
 from src.public_key import PublicKey
 from src.database import Database
-from src.block_factory import BlockFactory
+from src.chain.block import Block
+from src.chain.block_factory import BlockFactory
 from src.agent.info import AgentInfo
 from src.communication.interface import CommunicationInterface
 from src.communication.messages import Message, MessageTypes, NewMessage
@@ -41,7 +42,6 @@ class BaseAgent(MessageProcessor):
         self.database = None
         self.block_factory = None
         self.serializer = Serializer()
-
 
     def setup(self, options, port):
         """Loads a configuration for the agent. The configuration includes the discovery server
@@ -86,8 +86,8 @@ class BaseAgent(MessageProcessor):
         self.last_interaction_partner = partner
 
         new_block = self.block_factory.create_new(partner.public_key)
-        self.com.send(partner.address, Message(MessageTypes.BLOCK,
-                                               new_block.pack().encode('base64')))
+        self.com.send(partner.address, NewMessage(msg.BLOCK_PROPOSAL,
+                                                  new_block.as_message()))
 
     def request_agents(self):
         """Send a request for agents to the discovery server.
@@ -95,15 +95,6 @@ class BaseAgent(MessageProcessor):
 
         self.com.send(self.options['discovery_server'],
                       NewMessage(msg.AGENT_REQUEST, msg.Empty()))
-
-    def block_from_payload(self, payload):
-        """Constructs a block from a message payload string.
-        """
-
-        unpacked_list = self.serializer.unpack_multiple_as_list(HalfBlockPayload.format_list,
-                                                                payload.decode('base64'))
-        payload = HalfBlockPayload.from_unpack_list(*unpacked_list[0][0])
-        return TrustChainBlock.from_payload(payload, self.serializer)
 
     def block_pair_from_payload(self, payload):
         """Constructs a pair of blocks from a message payload string.
@@ -116,19 +107,45 @@ class BaseAgent(MessageProcessor):
 
     @MessageHandler(msg.AGENT_REPLY)
     def set_agents(self, sender, body):
+        """Message handler for the AGENT_REPLY message which the agent receives in reply to the
+        AGENT_REQUEST message. Set the list of known agents to the list of AgentInfo objects
+        contained in the reply.
+
+        Arguments:
+            sender {string} -- Address string of the sender of the reply
+            body {msg.AgentReply} -- AgentReply message, containing a list of AgentInfo objects
+        """
+
         self.agents = [AgentInfo.from_message(agent) for agent in body.agents]
 
-    @MessageHandler(MessageTypes.BLOCK)
-    def block_proposal(self, sender, payload):
-        block = self.block_from_payload(payload)
+    @MessageHandler(msg.BLOCK_PROPOSAL)
+    def block_proposal(self, sender, body):
+        """Message handler for the BLOCK_PROPOSAL message which the agent receives from another
+        agent that wants to create a record of a transaction. This function stores the block
+        contained in the message and replies to the agent with an agreement block.
+        
+        Arguments:
+            sender {string} -- Address string of the sender of the block proposal
+            body {msg.Block} -- Block message describing the block proposal
+        """
+
+        block = Block.from_message(body)
         self.database.add(block)
 
         new_block = self.block_factory.create_linked(block)
-        self.com.send(sender, Message(MessageTypes.BLOCK_REPLY, new_block.pack().encode('base64')))
+        self.com.send(sender, NewMessage(msg.BLOCK_AGREEMENT, new_block.as_message()))
 
-    @MessageHandler(MessageTypes.BLOCK_REPLY)
-    def block_confirm(self, sender, payload):
-        block = self.block_from_payload(payload)
+    @MessageHandler(msg.BLOCK_AGREEMENT)
+    def block_confirm(self, sender, body):
+        """Message handler for the BLOCK_AGREEMENT message which the agent receives from another
+        agent in reply to a previous block proposal. This function simply stores that block.
+        
+        Arguments:
+            sender {string} -- Address of the sender of the agreement block
+            body {msg.Block} -- Block message describing the agreement block
+        """
+
+        block = Block.from_message(body)
 
         self.database.add(block)
 
@@ -161,23 +178,16 @@ class BaseAgent(MessageProcessor):
         self.request_interaction()
 
     def write_data(self):
-        """Serializes the state of the agent in order to be analyzed afterwards.
+        """Serializes the state(database) of the agent in order to be analyzed afterwards. The files
+        are stored in the `data/` directory and are called after the human readable form of the
+        agents public key.
         """
 
         blocks = self.database._getall('', ())
-        with open(os.path.join('data', self.public_key.as_readable() + '.dat'), 'w+') as f:
-            f.write('%s %s\n' % (self.public_key.as_hex(), len(blocks)))
-            for block in blocks:
-                f.write('%s %s %d %s %d %s %s %s\n' % (
-                    pickle.dumps(block.transaction).encode('hex'),
-                    block.public_key.encode('hex'),
-                    block.sequence_number,
-                    block.link_public_key.encode('hex'),
-                    block.link_sequence_number,
-                    block.previous_hash.encode('hex'),
-                    block.signature.encode('hex'),
-                    block.hash.encode('hex')
-                ))
+        with open(os.path.join('data', self.public_key.as_readable() + '.dat'), 'wb') as f:
+            database = msg.Database(info=self.get_info().as_message(),
+                                    blocks=[block.as_message() for block in blocks])
+            f.write(database.SerializeToString())
 
     def run(self, dishonest=False):
         """

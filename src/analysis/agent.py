@@ -4,13 +4,16 @@ Analysis part of the agent.
 import pickle
 import logging
 
-from src.pyipv8.ipv8.attestation.trustchain.block import TrustChainBlock
-from src.pyipv8.ipv8.messaging.deprecated.encoding import encode
+import src.communication.messages_pb2 as msg
+
+from src.chain.block import Block
+from src.agent.info import AgentInfo
+
 
 class Agent:
 
-    def __init__(self, public_key, blocks):
-        self.public_key = public_key
+    def __init__(self, info, blocks):
+        self.info = info
         self.blocks = blocks
 
     @classmethod
@@ -18,29 +21,29 @@ class Agent:
         logging.debug('Opening file: %s', data_file)
         blocks = []
         info = []
-        with open(data_file, 'r') as f:
-            line = f.readline()
-            info = line.split(' ')
-            blocks = []
-            for _ in range(int(info[1])):
-                block_line = f.readline()
-                block_data = block_line.split(' ')
-                block_data[0] = encode(pickle.loads(block_data[0].decode('hex')))
-                blocks.append(TrustChainBlock(block_data))
+        with open(data_file, 'rb') as f:
+            database = msg.Database()
+            database.ParseFromString(f.read())
 
-        return cls(info[0], blocks)
+        return cls(AgentInfo.from_message(database.info),
+                   [Block.from_message(block) for block in database.blocks])
 
     def size_database(self):
         return len(self.blocks)
 
     def transactions_blocks(self):
-        blocks = [block for block in self.blocks if block.public_key == self.public_key and block.transaction.get('up')]
+        blocks = [block for block in self.blocks
+                  if block.public_key == self.info.public_key.as_bin()
+                  and block.transaction.get('up')]
         return len(blocks)
 
     def exchange_blocks(self):
-        blocks = [block for block in self.blocks if block.public_key == self.public_key and block.transaction.get('transfer_down')]
+        blocks = [block for block in self.blocks 
+                  if block.public_key == self.info.public_key.as_bin()
+                  and block.transaction.get('transfer_down')]
         return len(blocks)
 
     def foreign_blocks(self):
-        blocks = [block for block in self.blocks if block.public_key != self.public_key]
+        blocks = [block for block in self.blocks
+                  if block.public_key != self.info.public_key.as_bin()]
         return len(blocks)

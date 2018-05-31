@@ -4,6 +4,7 @@ Module defining messages that agents can send to each other.
 import json
 import src.communication.messages_pb2 as msg
 
+
 class MessageTypes(object):
     REGISTER = 1
     UNREGISTER = 2
@@ -18,6 +19,7 @@ class MessageTypes(object):
     PA_REPLY = 11
     PA_BLOCK_PROPOSAL = 12
     PA_BLOCK_ACCEPT = 13
+
 
 class Message(object):
     """
@@ -59,8 +61,11 @@ type_to_attribute = {
     msg.REGISTER: "register",
     msg.AGENT_REPLY: "agent_reply",
     msg.AGENT_REQUEST: "empty",
-    msg.UNREGISTER: "unregister"
+    msg.UNREGISTER: "unregister",
+    msg.BLOCK_PROPOSAL: "block",
+    msg.BLOCK_AGREEMENT: "block"
 }
+
 
 class NewMessage(object):
 
