@@ -8,6 +8,8 @@ import json
 import zmq
 from zmq.eventloop.zmqstream import ZMQStream
 
+from src.communication.messages_pb2 import WrapperMessage
+
 BASE_ADDRESS = "tcp://127.0.0.1:%d"
 
 class CommunicationInterface:
@@ -38,11 +40,15 @@ class CommunicationInterface:
 
         assert self.sender is not None, "Sending device is not initialized yet"
 
-        if message.sender is None:
-            message.set_sender(self.address)
+        message.set_sender(self.address)
 
         self.sender.connect(address)
-        self.sender.send_json(message.to_json())
+
+        if hasattr(message, 'to_json'):
+            self.sender.send_json(message.to_json())
+        else:
+            self.sender.send(message.message.SerializeToString())
+        
         self.sender.disconnect(address)
 
     def configure(self, port):
@@ -65,8 +71,15 @@ class CommunicationInterface:
             messages {[Message]} -- List of messages received from the receiver 
                                     device
         """
-        msg = json.loads(messages[0].decode('string-escape').strip('"'))
-        self.handler(msg)
+        msg = None
+        wrapped_msg = None
+        try:
+            msg = json.loads(messages[0].decode('string-escape').strip('"'))
+        except:
+            wrapped_msg = WrapperMessage()
+            wrapped_msg.ParseFromString(messages[0])
+            msg = getattr(wrapped_msg, wrapped_msg.WhichOneof('msg'))
+        self.handler(msg, wrapped_msg)
 
     def start(self, handler):
         """

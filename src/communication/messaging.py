@@ -56,16 +56,6 @@ class MessageProcessor(object):
 
     __metaclass__ = MessageHandlerType
 
-    def __init__(self, action_queue):
-        """Creates a new MessageProcessor. Each agent should have their own instance 
-        of a MessageProcessor which receives a handle to the agent's action queue.
-        
-        Arguments:
-            action_queue {tornado.Queue} -- Queue object containing actions for the agent
-        """
-
-        self.action_queue = action_queue
-
     def add_action(self, action):
         """Adds a new action to the action queue.
         
@@ -76,16 +66,21 @@ class MessageProcessor(object):
         self.action_queue.put(action)
 
 
-    def handle(self, message):
+    def handle(self, message, msg_wrapper = None):
         """Selects a handler for the type of the received message. If no handler is
         defined by the class for the given message type, the message will be ignored. 
         
         Arguments:
             message {[type]} -- [description]
         """
-
-        handler = self._message_handlers.get(message['type'], None)
+        if type(message) == dict:
+            handler = self._message_handlers.get(message['type'], None)
+        else:
+            handler = self._message_handlers.get(msg_wrapper.type, None)
 
         if handler is not None:
             logging.debug('Message received: %s' % message)
-            handler(self, message['sender'], message['payload'])
+            if type(message) == dict:
+                handler(self, message['sender'], message['payload'])
+            else:
+                handler(self, msg_wrapper.address, message)

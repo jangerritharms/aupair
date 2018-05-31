@@ -2,6 +2,13 @@ import unittest
 import mock
 import zmq
 from src.communication.interface import CommunicationInterface, BASE_ADDRESS
+from src.communication.messages import NewMessage
+import src.communication.messages_pb2 as msg
+
+
+TEST_MSG = NewMessage(msg.REGISTER, msg.Register(agent=msg.AgentInfo(
+    public_key="hello", address="world"
+)))
 
 class TestCommunicationInterface(unittest.TestCase):
     def test1(self):
@@ -23,43 +30,23 @@ class TestCommunicationInterface(unittest.TestCase):
         PORT = 10000
         interface = CommunicationInterface()
         interface.configure(PORT)
-        interface.start()
+        interface.start(lambda: None)
         
         RECV_ADDRESS = 'tcp://127.0.0.1:10001'
         ctx = zmq.Context()
         receiver = ctx.socket(zmq.PULL)
         receiver.bind(RECV_ADDRESS)
         
-        MSG = {'hello': 'world'}
-        interface.send(RECV_ADDRESS, MSG)
-        received = receiver.recv_json()
+        interface.send(RECV_ADDRESS, TEST_MSG)
+        received = receiver.recv()
 
         ctx.destroy()
         interface.stop()
 
-        self.assertEqual(received, MSG)
+        received_message = msg.WrapperMessage()
+        received_message.ParseFromString(received)
+        self.assertEqual(received_message.type, msg.REGISTER)
 
-    def test3(self):
-        """
-        two interfaces can communicate
-        """
-        PORT = 10000
-        interface = CommunicationInterface()
-        interface.configure(PORT)
-        interface.start()
-        
-        RECV_PORT = 10001
-        rec = CommunicationInterface()
-        rec.configure(RECV_PORT)
-        rec.start()
-        
-        MSG = {'hello': 'world'}
-        interface.send(BASE_ADDRESS % RECV_PORT, MSG)
-
-        received = rec.receiver.recv_json()
-        self.assertEqual(received, MSG)
-
-        rec.stop()
-        interface.stop()
+    
 
     

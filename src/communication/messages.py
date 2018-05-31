@@ -2,6 +2,7 @@
 Module defining messages that agents can send to each other.
 """
 import json
+import src.communication.messages_pb2 as msg
 
 class MessageTypes(object):
     REGISTER = 1
@@ -53,3 +54,24 @@ class Message(object):
             "payload": self.payload,
             "sender": self.sender
         })
+
+type_to_attribute = {
+    msg.REGISTER: "register",
+    msg.AGENT_REPLY: "agent_reply",
+    msg.AGENT_REQUEST: "empty",
+    msg.UNREGISTER: "unregister"
+}
+
+class NewMessage(object):
+
+    def __init__(self, message_type, payload):
+        """Creates a message of given type and with the given payload.
+        """
+
+        self.message = msg.WrapperMessage()
+        self.message.type = message_type
+
+        self.message.__getattribute__(type_to_attribute[message_type]).CopyFrom(payload)
+
+    def set_sender(self, address):
+        self.message.address = address

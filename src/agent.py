@@ -14,6 +14,7 @@ from zmq.eventloop.zmqstream import ZMQStream
 from tornado import ioloop
 
 from src.pyipv8.ipv8.keyvault.crypto import ECCrypto
+from src.pyipv8.ipv8.keyvault.public.libnaclkey import LibNaCLPK
 from src.pyipv8.ipv8.messaging.serialization import Serializer
 from src.pyipv8.ipv8.attestation.trustchain.payload import HalfBlockPayload, HalfBlockPairPayload
 from src.pyipv8.ipv8.attestation.trustchain.block import TrustChainBlock
@@ -23,14 +24,36 @@ from src.communication.messages import Message, MessageTypes
 from src.database import Database
 from src.utils import create_index_from_chain, create_index_from_blocks, calculate_difference
 from src.communication.messaging import MessageProcessor, MessageHandler
+from src.communication.messages import NewMessage
 from src.communication.interface import CommunicationInterface
+from src.public_key import PublicKey
 from src.block_factory import BlockFactory
+import src.communication.messages_pb2 as msg
+
 
 class AgentInfo(object):
 
-    def __init__(self, agent):   
-        self.public_key = agent.public_key
-        self.address = agent.com.address
+    def __init__(self, public_key, address):   
+        self.public_key = public_key
+        self.address = address
+
+    def as_message(self):
+        message = msg.AgentInfo()
+        message.public_key = self.public_key.as_hex()
+        message.address = self.address
+
+        return message
+
+    @classmethod
+    def from_agent(cls, agent):
+        return cls(agent.public_key, agent.com.address)
+
+    @classmethod
+    def from_message(cls, message):
+        return cls(PublicKey.from_hex(message.public_key), message.address)
+
+    def __eq__(self, other):
+        return self.__dict__ == other.__dict__
 
 class Agent(MessageProcessor):
     """
@@ -60,7 +83,7 @@ class Agent(MessageProcessor):
         self.serializer = Serializer()
 
         self.private_key = ECCrypto().generate_key('curve25519')
-        self.public_key = self.private_key.pub()
+        self.public_key = PublicKey(self.private_key.pub())
 
         self.emulation_duration = 0
         self.emulation_step_length = 0
@@ -100,7 +123,7 @@ class Agent(MessageProcessor):
             AgentInfo -- Info object about the agent.
         """
 
-        return AgentInfo(self)
+        return AgentInfo.from_agent(self)
 
 
     def request_interaction(self, partner=None, double_spend=False):
@@ -109,10 +132,9 @@ class Agent(MessageProcessor):
 
         :param partner: Dict of the partner including public_key and address
         """
-        while partner is None or partner[1]['address'] == self.address:
+        while partner is None or partner == self.get_info():
             partner = random.choice(self.agents)
         self.last_interaction_partner = partner
-        partner = {'public_key': partner[0], 'address': partner[1]['address']}
 
         # if double_spend:
         #     logging.debug('%s double spending', self.address)
@@ -128,27 +150,25 @@ class Agent(MessageProcessor):
         #                 'DELETE FROM blocks WHERE public_key = ? AND sequence_number = ?',
         #                 (buffer(self.public_key.key_to_bin()), latest.sequence_number))
 
-        new_block = self.block_factory.create_new(str(partner['public_key']).decode('hex'))
-        self.send(partner['address'], Message(MessageTypes.BLOCK,
+        new_block = self.block_factory.create_new(partner.public_key)
+        self.send(partner.address, Message(MessageTypes.BLOCK,
                                               new_block.pack().encode('base64')))
-        logging.debug('%s requesting interaction with %s', self.address, partner['address'], extra={'address': self.address})
+        logging.debug('%s requesting interaction with %s', self.address, partner.address, extra={'address': self.address})
 
     def request_crawl(self, partner=None):
         """
         Request data from the other node.
         """
-        while partner is None or partner[1]['address'] == self.address:
+        while partner is None or partner == self.get_info():
             partner = random.choice(self.agents)
-        partner = {'public_key': partner[0], 'address': partner[1]['address']}
-        self.send(partner['address'], Message(MessageTypes.CRAWL_REQUEST))
+        self.send(partner.address, Message(MessageTypes.CRAWL_REQUEST))
 
     def request_audit(self, partner=None):
         """
         Request audit request from the other node.
         """
-        while partner is None or partner[1]['address'] == self.address:
+        while partner is None or partner == self.get_info():
             partner = random.choice(self.agents)
-        partner = {'public_key': partner[0], 'address': partner[1]['address']}
 
         blocks = self.database.get_chain(self.public_key)
 
@@ -156,16 +176,15 @@ class Agent(MessageProcessor):
         for block in blocks:
             list_of_packs.append(block.pack().encode('base64'))
 
-        logging.debug('%s requesting audit from %s', self.address, partner['address'])
-        self.send(partner['address'], Message(MessageTypes.PA_REQUEST,
+        logging.debug('%s requesting audit from %s', self.address, partner.address)
+        self.send(partner.address, Message(MessageTypes.PA_REQUEST,
                                               list_of_packs))
 
     def get_agents(self):
         """
         Selects the next interaction partner.
         """
-        logging.debug('Getting agents', extra={'address': self.address})
-        self.send(self.discovery_address, Message(MessageTypes.AGENT_REQUEST))
+        self.send(self.discovery_address, NewMessage(msg.AGENT_REQUEST, msg.Empty()))
 
     def block_from_payload(self, payload):
         """
@@ -185,9 +204,9 @@ class Agent(MessageProcessor):
         payload = HalfBlockPairPayload.from_unpack_list(*unpacked_list[0][0])
         return TrustChainBlock.from_pair_payload(payload, self.serializer)
 
-    @MessageHandler(MessageTypes.AGENT_REPLY)
-    def set_agents(self, sender, agents):
-        self.agents = agents
+    @MessageHandler(msg.AGENT_REPLY)
+    def set_agents(self, sender, body):
+        self.agents = [AgentInfo.from_message(agent) for agent in body.agents]
 
     @MessageHandler(MessageTypes.BLOCK)
     def block_proposal(self, sender, payload):
@@ -269,7 +288,7 @@ class Agent(MessageProcessor):
         self.validate_chain(chain)
         blocks = self.calculate_difference(chain)
 
-        new_block = self.block_factory.create_new(chain[0].public_key,
+        new_block = self.block_factory.create_new(PublicKey(chain[0].public_key),
                         {'transfer_up': create_index_from_blocks(blocks),
                          'transfer_down': create_index_from_blocks(transfer)})
 
@@ -297,7 +316,7 @@ class Agent(MessageProcessor):
 
         self.send(sender, Message(MessageTypes.PA_BLOCK_ACCEPT,
                                          new_block.pack().encode('base64')))
-        new_block = self.block_factory.create_new(block.public_key,
+        new_block = self.block_factory.create_new(PublicKey(block.public_key),
                     {"transfer_down": [[block.public_key, [block.sequence_number]]]})
 
     @MessageHandler(MessageTypes.PA_BLOCK_ACCEPT)
@@ -305,7 +324,7 @@ class Agent(MessageProcessor):
         block = self.block_from_payload(payload)
 
         self.database.add(block)
-        new_block = self.block_factory.create_new(block.public_key,
+        new_block = self.block_factory.create_new(PublicKey(block.public_key),
                     {"transfer_down": [[block.public_key, [block.sequence_number]]]})
 
 
@@ -321,7 +340,7 @@ class Agent(MessageProcessor):
         them as a list.
         """
         own_chain = self.database.get_chain(self.public_key)
-        own_index = create_index_from_chain(own_chain, self.public_key.key_to_bin())
+        own_index = create_index_from_chain(own_chain, self.public_key.as_bin())
         other_index = create_index_from_chain(other_chain, other_chain[0].public_key)
 
         diff = calculate_difference(own_index, other_index)
@@ -336,17 +355,15 @@ class Agent(MessageProcessor):
         """
         Called by the agent to register with the discovery server.
         """
-        self.send(self.discovery_address,
-                  Message(MessageTypes.REGISTER,
-                          {'public_key': self.public_key.key_to_bin().encode('hex')}))
+        message = msg.Register(agent=self.get_info().as_message())
+        self.com.send(self.discovery_address, NewMessage(msg.REGISTER, message))
 
     def unregister(self):
         """
         Called by the agent to register with the discovery server.
         """
-        self.send(self.discovery_address,
-                  Message(MessageTypes.UNREGISTER,
-                          self.public_key.key_to_bin().encode('hex')))
+        message = msg.Unregister(agent=self.get_info().as_message())
+        self.com.send(self.discovery_address, NewMessage(msg.UNREGISTER, message))
         time.sleep(1)
         self.loop.stop()
 
@@ -378,17 +395,17 @@ class Agent(MessageProcessor):
         """
         blocks = self.database._getall('', ())
         chain = self.database._getall('WHERE public_key = ?',
-                                      (buffer(self.public_key.key_to_bin()),))
+                                      (self.public_key.as_buffer(),))
         if not self.crawling:
             try:
                 block_index = create_index_from_blocks(blocks)
-                chain_index = create_index_from_chain(chain, self.public_key.key_to_bin())
+                chain_index = create_index_from_chain(chain, self.public_key.as_bin())
                 assert sorted(block_index, key=lambda x: x[0]) == sorted(chain_index, key=lambda x: x[0])
             except AssertionError:
                 logging.warning('%s: From blocks: %s', self.address, sorted(block_index, key=lambda x: x[0]))
                 logging.warning('%s: From chain: %s', self.address, sorted(chain_index, key=lambda x: x[0]))
-        with open(os.path.join('data', self.public_key.key_to_bin().encode('hex')[20:30] + '.dat'), 'w+') as f:
-            f.write('%s %s\n' % (self.public_key.key_to_bin().encode('hex'),
+        with open(os.path.join('data', self.public_key.as_bin().encode('hex')[20:30] + '.dat'), 'w+') as f:
+            f.write('%s %s\n' % (self.public_key.as_bin().encode('hex'),
                                  len(blocks)))
             for block in blocks:
                 f.write('%s %s %d %s %d %s %s %s\n' % (

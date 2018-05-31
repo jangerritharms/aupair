@@ -27,7 +27,7 @@ class BlockFactory(object):
         """
 
         genesis_block = TrustChainBlock()
-        genesis_block.public_key = str(self.public_key.key_to_bin())
+        genesis_block.public_key = self.public_key.as_bin()
         genesis_block.sign(self.private_key)
         self.db.add_block(genesis_block)
 
@@ -41,8 +41,8 @@ class BlockFactory(object):
 
         new_block = TrustChainBlock.create(payload,
                                            self.db,
-                                           str(self.public_key.key_to_bin()),
-                                           link_pk=partner)
+                                           self.public_key.as_bin(),
+                                           link_pk=partner.as_bin())
         new_block.sign(self.private_key)
         self.db.add(new_block)
         
@@ -57,7 +57,7 @@ class BlockFactory(object):
 
         new_block = TrustChainBlock.create(None,
                                            self.db,
-                                           str(self.public_key.key_to_bin()),
+                                           self.public_key.as_bin(),
                                            link=linked_block)
         new_block.sign(self.private_key)
         self.db.add(new_block)

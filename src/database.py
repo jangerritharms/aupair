@@ -29,7 +29,7 @@ class Database(TrustChainDB):
             if check_double_spend:
                 existing = self.database.get(block.public_key, block.sequence_number)
                 if existing.hash != block.hash:
-                    logging.warning('DOUBLE SPENDING DETECTED after %d seconds', self.start_time - time.time())
+                    logging.warning('DOUBLE SPENDING DETECTED')
 
     def get_chain(self, key):
         """Retrives the chain (all blocks authored) of the agent with the given
@@ -41,7 +41,7 @@ class Database(TrustChainDB):
         Returns:
             {[TrustChainBlock]} -- List of blocks, ordered by sequence number.
         """
-        return self.database._getall('WHERE public_key = ?', (buffer(key.key_to_bin()),))
+        return self.database._getall('WHERE public_key = ?', (key.as_buffer(),))
 
     def delete(self, key, sequence_begin, sequence_length=1):
         """Deletes a sequence of blocks from the database. This can be used as a simple way to 
@@ -59,7 +59,7 @@ class Database(TrustChainDB):
         self.database.execute(
                         'DELETE FROM blocks WHERE public_key = ? AND sequence_number >= ? ' + \
                         'AND sequence_number < ?',
-                        (buffer(key.key_to_bin()),
+                        (key.as_buffer(),
                         sequence_begin,
                         sequence_begin + sequence_length))
     

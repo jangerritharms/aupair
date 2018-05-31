@@ -1,0 +1,39 @@
+syntax = "proto2";
+
+enum Type {
+    REGISTER = 1;
+    AGENT_REPLY = 2;
+    AGENT_REQUEST = 3;
+    UNREGISTER = 4;
+}
+
+message Empty {}
+
+message AgentInfo {
+    required string public_key = 1;
+    required string address = 2;
+}
+
+message Register {
+    required AgentInfo agent = 1;
+}
+
+message Unregister {
+    required AgentInfo agent = 1;
+}
+
+message AgentReply {
+    repeated AgentInfo agents = 1; 
+}
+
+message WrapperMessage{
+    required Type type = 1;
+    required string address = 2;
+    
+    oneof msg {
+        Empty empty = 10;
+        Register register = 11;
+        AgentReply agent_reply = 12;
+        Unregister unregister = 13;
+    }
+}
