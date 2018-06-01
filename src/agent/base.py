@@ -77,13 +77,11 @@ class BaseAgent(MessageProcessor):
 
         Keyword Arguments:
             partner {AgentInfo} -- Contact information about the partner for the new interaction. If
-            this is None, a partner will be selected according to the
-            interaction_partner_selection_strategy. (default: {None})
+            this is None, a partner will be selected randomly. (default: {None})
         """
 
         while partner is None or partner == self.get_info():
             partner = random.choice(self.agents)
-        self.last_interaction_partner = partner
 
         new_block = self.block_factory.create_new(partner.public_key)
         self.com.send(partner.address, NewMessage(msg.BLOCK_PROPOSAL,
@@ -95,15 +93,6 @@ class BaseAgent(MessageProcessor):
 
         self.com.send(self.options['discovery_server'],
                       NewMessage(msg.AGENT_REQUEST, msg.Empty()))
-
-    def block_pair_from_payload(self, payload):
-        """Constructs a pair of blocks from a message payload string.
-        """
-
-        unpacked_list = self.serializer.unpack_multiple_as_list(HalfBlockPairPayload.format_list,
-                                                                payload.decode('base64'))
-        payload = HalfBlockPairPayload.from_unpack_list(*unpacked_list[0][0])
-        return TrustChainBlock.from_pair_payload(payload, self.serializer)
 
     @MessageHandler(msg.AGENT_REPLY)
     def set_agents(self, sender, body):
@@ -189,7 +178,7 @@ class BaseAgent(MessageProcessor):
                                     blocks=[block.as_message() for block in blocks])
             f.write(database.SerializeToString())
 
-    def run(self, dishonest=False):
+    def run(self):
         """
         Starts the main loop of the agent.
         """
