@@ -39,9 +39,9 @@ class Message(object):
         """Usually we would like to set the sender separate from the content.
         This function sets the origin of the message which can be useful for the
         replying agent.
-        
+
         Arguments:
-            sender {string} -- Address string of the receiving device of the 
+            sender {string} -- Address string of the receiving device of the
                                sending agent.
         """
         self.sender = sender

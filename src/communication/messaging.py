@@ -2,21 +2,22 @@
 """
 import logging
 
+
 class MessageHandler:
-    """Decorator that defines the decorated function as a handler for a certain 
+    """Decorator that defines the decorated function as a handler for a certain
     message type. This works in conjunction with the MessageProcessor class which
     registers the handlers and handles incoming messages.
-    
+
     Example:
 
-    @MessageHandler('hello')
-    def hello_handler():
-        [...]
+        @MessageHandler('hello')
+        def hello_handler():
+            [...]
 
     """
     def __init__(self, message_type):
         """Creates a handler for the given type of message.
-        
+
         Arguments:
             message_type {MessageTypes} -- Type of the message to handle.
         """
@@ -45,10 +46,10 @@ class MessageHandlerType(type):
 
 
 class MessageProcessor(object):
-    """Basic class for processing messages. Agents can have different strategies of 
-    replying to messages so variations of MessageProcessors can be defined. The main 
+    """Basic class for processing messages. Agents can have different strategies of
+    replying to messages so variations of MessageProcessors can be defined. The main
     function is the handle function which selects the right message handler for the
-    incoming message. The MessageProcessor requires a Queue object to which actions 
+    incoming message. The MessageProcessor requires a Queue object to which actions
     are appended for the agent to execute in response to the handled message. Without
     any MessageHandlers this class does not handle any type of message, so this class
     should be extended with actual message handlers.
@@ -58,18 +59,17 @@ class MessageProcessor(object):
 
     def add_action(self, action):
         """Adds a new action to the action queue.
-        
+
         Arguments:
             action {Action} -- Action to be added to the queue.
         """
 
         self.action_queue.put(action)
 
-
-    def handle(self, message, msg_wrapper = None):
+    def handle(self, message, msg_wrapper=None):
         """Selects a handler for the type of the received message. If no handler is
-        defined by the class for the given message type, the message will be ignored. 
-        
+        defined by the class for the given message type, the message will be ignored.
+
         Arguments:
             message {[type]} -- [description]
         """
@@ -80,6 +80,7 @@ class MessageProcessor(object):
 
         if handler is not None:
             logging.debug('Message received: %s' % message)
+            logging.debug('Message wrapper: %s' % msg_wrapper)
             if type(message) == dict:
                 handler(self, message['sender'], message['payload'])
             else:

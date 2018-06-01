@@ -112,7 +112,7 @@ class BaseAgent(MessageProcessor):
         """Message handler for the BLOCK_PROPOSAL message which the agent receives from another
         agent that wants to create a record of a transaction. This function stores the block
         contained in the message and replies to the agent with an agreement block.
-        
+
         Arguments:
             sender {string} -- Address string of the sender of the block proposal
             body {msg.Block} -- Block message describing the block proposal
@@ -128,7 +128,7 @@ class BaseAgent(MessageProcessor):
     def block_confirm(self, sender, body):
         """Message handler for the BLOCK_AGREEMENT message which the agent receives from another
         agent in reply to a previous block proposal. This function simply stores that block.
-        
+
         Arguments:
             sender {string} -- Address of the sender of the agreement block
             body {msg.Block} -- Block message describing the agreement block
@@ -160,9 +160,6 @@ class BaseAgent(MessageProcessor):
         """Defines the behavior of the agent. This function is called every 0.01 seconds. Each call
         the agent decides according to some strategy whether to perform an action or not.
         """
-
-        choices = [True, False, False, False, False]
-        interact = random.choice(choices)
 
         self.request_interaction()
 
