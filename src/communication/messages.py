@@ -63,7 +63,13 @@ type_to_attribute = {
     msg.AGENT_REQUEST: "empty",
     msg.UNREGISTER: "unregister",
     msg.BLOCK_PROPOSAL: "block",
-    msg.BLOCK_AGREEMENT: "block"
+    msg.BLOCK_AGREEMENT: "block",
+    msg.PROTECT_CHAIN: "db",
+    msg.PROTECT_BLOCKS_REQUEST: "index",
+    msg.PROTECT_BLOCKS_REPLY: "db",
+    msg.PROTECT_CHAIN_BLOCKS: "db",
+    msg.PROTECT_BLOCK_PROPOSAL: "block",
+    msg.PROTECT_BLOCK_AGREEMENT: "block"
 }
 
 
@@ -80,3 +86,6 @@ class NewMessage(object):
 
     def set_sender(self, address):
         self.message.address = address
+
+    def __eq__(self, other):
+        return self.__dict__ == other.__dict__

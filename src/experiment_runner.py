@@ -9,6 +9,7 @@ from multiprocessing import Process
 
 import src.analysis.agent
 from src.agent.base import BaseAgent
+from src.agent.protect import ProtectAgent
 from src.discovery import DiscoveryServer, spawn_discovery_server
 
 from src.pyipv8.ipv8.attestation.trustchain.database import TrustChainDB
@@ -96,7 +97,7 @@ class ExperimentRunner(object):
         discovery_process.start()
 
         for _ in range(self.options['honest_nodes']):
-            agent = BaseAgent()
+            agent = ProtectAgent()
             next_port = self.options['node_port_range_begin'] + len(self.agent_processes)
             agent.setup(self.options, next_port)
             agent_process = Process(target=agent.run)
