@@ -46,6 +46,7 @@ message WrapperMessage{
         Block block = 14;
         Database db = 15;
         BlockIndex index = 16;
+        ChainAndBlocks chain_index = 17;
     }
 }
 
@@ -67,11 +68,16 @@ message Database {
 
 message BlockIndexEntry {
     required bytes public_key = 1;
-    required int32 from = 2;
+    required int32 begin = 2;
 
-    optional int32 to = 3;
+    optional int32 end = 3;
 }
 
 message BlockIndex {
     repeated BlockIndexEntry entries = 1;
+}
+
+message ChainAndBlocks {
+    repeated Block chain = 1;
+    repeated Block blocks = 2;
 }

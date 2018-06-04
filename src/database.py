@@ -40,7 +40,7 @@ class Database(TrustChainDB):
     def get_chain(self, key):
         """Retrives the chain (all blocks authored) of the agent with the given
         public key.
-        
+
         Arguments:
             key {PublicKey} -- Public key of the agent for which the chain is retrieved.
 
@@ -50,22 +50,36 @@ class Database(TrustChainDB):
         return self._getall('WHERE public_key = ?', (key.as_buffer(),))
 
     def delete(self, key, sequence_begin, sequence_length=1):
-        """Deletes a sequence of blocks from the database. This can be used as a simple way to 
-        create a double-spend attack, by removing a block from the end of the chain, a new block 
+        """Deletes a sequence of blocks from the database. This can be used as a simple way to
+        create a double-spend attack, by removing a block from the end of the chain, a new block
         will reuse a previously used sequence number.
-        
+
         Arguments:
             key {PublicKey} -- Public key of the agent whose chain will be altered
             sequence_begin {int} -- First sequence number to delete
-        
+
         Keyword Arguments:
             sequence_length {int} -- Number of blocks to remove (default: {-1})
         """
 
         self.database.execute(
-                        'DELETE FROM blocks WHERE public_key = ? AND sequence_number >= ? ' + \
+                        'DELETE FROM blocks WHERE public_key = ? AND sequence_number >= ? ' +
                         'AND sequence_number < ?',
                         (key.as_buffer(),
-                        sequence_begin,
-                        sequence_begin + sequence_length))
-    
+                         sequence_begin,
+                         sequence_begin + sequence_length))
+
+    def index(self, index):
+        """Returns a subset of the database indexed by the passed index.
+
+        Arguments:
+            index {BlockIndex} -- Index, defining which subset of blocks to return.
+        """
+
+        args = index.to_database_args()
+        db_args = []
+        for arg in args:
+            db_args.extend([buffer(arg[0]), arg[1]])
+        query = 'WHERE (public_key, sequence_number) IN (VALUES {})'.format(
+            ','.join(['(?,?)']*len(args)))
+        return self._getall(query, tuple(db_args))
