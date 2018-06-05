@@ -10,6 +10,7 @@ from multiprocessing import Process
 import src.analysis.agent
 from src.agent.base import BaseAgent
 from src.agent.protect import ProtectAgent
+from src.agent.bad_chain import BadChainProtectAgent
 from src.discovery import DiscoveryServer, spawn_discovery_server
 
 from src.pyipv8.ipv8.attestation.trustchain.database import TrustChainDB
@@ -108,10 +109,10 @@ class ExperimentRunner(object):
             self.agent_processes.append(agent_process)
 
         for _ in range(self.options['dishonest_nodes']):
-            agent = Agent()
+            agent = BadChainProtectAgent()
             next_port = self.options['node_port_range_begin'] + len(self.agent_processes)
-            agent.configure(self.options, next_port)
-            agent_process = Process(target=agent.run, args=(True, ))
+            agent.setup(self.options, next_port)
+            agent_process = Process(target=agent.run)
             agent_process.start()
             self.agent_processes.append(agent_process)
 

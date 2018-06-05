@@ -1,5 +1,6 @@
 import random
 import logging
+from collections import Counter
 
 import src.communication.messages_pb2 as msg
 
@@ -18,13 +19,13 @@ class ProtectAgent(BaseAgent):
         self.open_requests = {}
 
     def request_protect(self, partner=None):
-        tries = 0
-        while partner is None or partner == self.get_info() or \
-                partner.address in self.open_requests:
-            if tries > len(self.agents):
-                return
+        while partner is None or partner == self.get_info():
             partner = random.choice(self.agents)
-            tries += 1
+
+        if partner.address in self.open_requests:
+            return
+        if partner.address in self.ignore_list:
+            return
 
         chain = self.database.get_chain(self.public_key)
         db = msg.Database(info=self.get_info().as_message(),
@@ -39,6 +40,11 @@ class ProtectAgent(BaseAgent):
             logging.error('Request already open, ignoring')
             self.com.send(sender, NewMessage(msg.PROTECT_REJECT, msg.Empty()))
             return
+
+        if sender in self.ignore_list:
+            self.com.send(sender, NewMessage(msg.PROTECT_REJECT, msg.Empty()))
+            return
+
         chain = [Block.from_message(block) for block in body.blocks]
 
         verification = self.verify_chain(chain)
@@ -50,7 +56,8 @@ class ProtectAgent(BaseAgent):
             self.open_requests[sender] = {'index': partner_index}
             self.logger.debug("[1] Requesting BLOCKS from %s", sender)
         else:
-            ignore_list.append(AgentInfo.from_message(body.info))
+            self.ignore_list.append(sender)
+            self.com.send(sender, NewMessage(msg.PROTECT_REJECT, msg.Empty()))
 
     @MessageHandler(msg.PROTECT_BLOCKS_REQUEST)
     def protect_blocks_request(self, sender, body):
@@ -158,6 +165,9 @@ class ProtectAgent(BaseAgent):
             bool -- Outcome of the verification, True means correct, False means fraud
         """
 
+        seq = [block.sequence_number for block in chain]
+        if not Counter(seq) == Counter(range(1, max(seq)+1)):
+            return False
         return True
 
     def verify_blocks(self, block):
