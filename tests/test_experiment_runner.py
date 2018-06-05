@@ -9,8 +9,3 @@ class TestExperimentRunner(unittest.TestCase):
         with open('tests/resources/test_config.json', 'r') as config:
             e.load_configuration(config)
             self.assertEquals(e.options['honest_nodes'],2)
-
-    def test2(self):
-        "Spawns an agent."
-        e = ExperimentRunner()
-        e.spawnAgent()
