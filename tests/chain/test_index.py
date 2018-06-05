@@ -37,12 +37,14 @@ class TestBlockIndex(unittest.TestCase):
         blocks.append(gen_a.generate_simple())
         blocks.append(gen_a.generate_simple())
         blocks.append(gen_a.generate_simple())
-        transfer_block = gen_a.generate_simple_with_payload({'transfer_up': [(key_b, [1, 2, 3])],
-                                                            'transfer_down': [(key_c, [2, 3, 4])]})
+        transfer_block = gen_a.generate_simple_with_payload({
+            'transfer_up': [(key_b.encode('hex'), [1, 2, 3])],
+            'transfer_down': [(key_c.encode('hex'), [2, 3, 4])]})
         transfer_block.link_sequence_number = UNKNOWN_SEQ
         blocks.append(transfer_block)
-        transfer_block = gen_a.generate_simple_with_payload({'transfer_up': [(key_b, [4, 5, 6])],
-                                                            'transfer_down': [(key_c, [1, 2])]})
+        transfer_block = gen_a.generate_simple_with_payload({
+            'transfer_up': [(key_b.encode('hex'), [4, 5, 6])],
+            'transfer_down': [(key_c.encode('hex'), [1, 2])]})
         transfer_block.link_sequence_number = 10
         blocks.append(transfer_block)
 

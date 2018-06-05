@@ -12,6 +12,8 @@ class TestProtectAgent(unittest.TestCase):
         partner = MockObject()
         partner.address = 'world'
         a = ProtectAgent()
+        a.logger = MockObject()
+        a.logger.debug = lambda *args: None
         a.com = mock.MagicMock()
         a.com.address = 'hello'
         a.database = MockObject()
