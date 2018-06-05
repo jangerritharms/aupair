@@ -8,7 +8,6 @@ from src.pyipv8.ipv8.attestation.trustchain.block import TrustChainBlock, GENESI
 from src.pyipv8.ipv8.messaging.serialization import Serializer
 
 
-
 class Block(TrustChainBlock):
     """Extension to the normal TrustChainBlock, mostly for convenience to conver blocks to
     messages and back.
@@ -82,7 +81,7 @@ class Block(TrustChainBlock):
     @classmethod
     def convert_to_Block(cls, obj):
         """Converts TrustChainBlocks to Blocks.
-        
+   
         Arguments:
             obj {TrustChainBlock} -- Block that will be converted
         """
