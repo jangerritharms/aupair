@@ -2,6 +2,7 @@ import os
 import random
 import time
 import pickle
+import logging
 
 from tornado import ioloop
 
@@ -42,6 +43,7 @@ class BaseAgent(MessageProcessor):
         self.database = None
         self.block_factory = None
         self.serializer = Serializer()
+        self.logger = None
 
     def setup(self, options, port):
         """Loads a configuration for the agent. The configuration includes the discovery server
@@ -60,6 +62,7 @@ class BaseAgent(MessageProcessor):
         self.database = Database('', 'db_' + str(port))
         self.block_factory = BlockFactory(self.database, self.public_key, self.private_key)
         self.block_factory.create_genesis()
+        self.logger = logging.getLogger(name=str(port))
 
         self.com.configure(port)
 
