@@ -79,8 +79,6 @@ class MessageProcessor(object):
             handler = self._message_handlers.get(msg_wrapper.type, None)
 
         if handler is not None:
-            logging.debug('Message received: %s' % message)
-            logging.debug('Message wrapper: %s' % msg_wrapper)
             if type(message) == dict:
                 handler(self, message['sender'], message['payload'])
             else:

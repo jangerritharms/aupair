@@ -13,6 +13,7 @@ enum Type {
     PROTECT_CHAIN_BLOCKS = 10;
     PROTECT_BLOCK_PROPOSAL = 11;
     PROTECT_BLOCK_AGREEMENT = 12;
+    PROTECT_REJECT = 13;
 }
 
 message Empty {}
