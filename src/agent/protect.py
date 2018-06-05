@@ -13,6 +13,8 @@ from src.chain.index import BlockIndex
 
 class ProtectAgent(BaseAgent):
 
+    _type = "Protect"
+
     def __init__(self, *args, **kwargs):
         super(ProtectAgent, self).__init__(*args, **kwargs)
         self.ignore_list = []

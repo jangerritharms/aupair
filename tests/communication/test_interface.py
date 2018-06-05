@@ -7,7 +7,7 @@ import src.communication.messages_pb2 as msg
 
 
 TEST_MSG = NewMessage(msg.REGISTER, msg.Register(agent=msg.AgentInfo(
-    public_key="hello", address="world"
+    public_key="hello", address="world", type="base"
 )))
 
 class TestCommunicationInterface(unittest.TestCase):

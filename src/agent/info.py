@@ -7,7 +7,7 @@ class AgentInfo(object):
     agent it describes.
     """
 
-    def __init__(self, public_key, address):
+    def __init__(self, public_key, address, agent_type):
         """Creates a new AgentInfo object by passing the neccessary information.
 
         Arguments:
@@ -17,6 +17,7 @@ class AgentInfo(object):
 
         self.public_key = public_key
         self.address = address
+        self.type = agent_type
 
     def as_message(self):
         """Creates a protobuf message representation of the given AddInfo instance.
@@ -28,6 +29,7 @@ class AgentInfo(object):
         message = msg.AgentInfo()
         message.public_key = self.public_key.as_hex()
         message.address = self.address
+        message.type = self.type
 
         return message
 
@@ -42,7 +44,7 @@ class AgentInfo(object):
             AddInfo -- AddInfo object describing agent.
         """
 
-        return cls(agent.public_key, agent.com.address)
+        return cls(agent.public_key, agent.com.address, agent._type)
 
     @classmethod
     def from_message(cls, message):
@@ -54,7 +56,7 @@ class AgentInfo(object):
         Returns:
             AddInfo -- AddInfo object describing the same agent as the message.
         """
-        return cls(PublicKey.from_hex(message.public_key), message.address)
+        return cls(PublicKey.from_hex(message.public_key), message.address, message.type)
 
     def __eq__(self, other):
         return self.__dict__ == other.__dict__

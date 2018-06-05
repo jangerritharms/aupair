@@ -21,6 +21,7 @@ message Empty {}
 message AgentInfo {
     required string public_key = 1;
     required string address = 2;
+    required string type = 3;
 }
 
 message Register {

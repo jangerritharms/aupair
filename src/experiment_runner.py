@@ -53,21 +53,31 @@ class ExperimentRunner(object):
         files = [f for f in files if f[-4:] == '.dat']
 
         agents = []
+        honest_agents = []
+        dishonest_agents = []
         for db_file in files:
             agent = src.analysis.agent.Agent.from_file(os.path.join('data', db_file))
             agents.append(agent)
+            if agent.info.type == "Protect":
+                honest_agents.append(agent)
+            elif agent.info.type == "BadChain":
+                dishonest_agents.append(agent)
 
-        stack = [[agent.transactions_blocks() for agent in agents],
-                 [agent.exchange_blocks() for agent in agents],
-                 [agent.foreign_blocks() for agent in agents]]
-        plt.stackplot(range(len(agents)),
-                      *stack,
-                      labels=['transactions', 'exchange', 'foreign'],
-                      baseline='zero')
+        keys = [agent.info.public_key.as_readable() for agent in agents]
+        honest_transactions = [agent.transactions_blocks()for agent in honest_agents]
+        dishonest_transactions = [agent.transactions_blocks() for agent in dishonest_agents]
+
+        p1 = plt.bar(range(len(honest_agents)), honest_transactions, 0.35, color="#57a773")
+        p2 = plt.bar(range(len(honest_agents), len(honest_agents) + len(dishonest_agents)),
+                     dishonest_transactions, 0.35, color="#3f88c5")
+
         plt.title('Database view')
-        plt.xlabel('Agent')
-        plt.ylabel('Number of blocks')
-        plt.legend(loc=2)
+        plt.xlabel('Agent by public key')
+        plt.xlim([0, len(agents)])
+        plt.xticks(range(len(agents)), keys, rotation="vertical")
+        plt.ylabel('Number of transaction')
+        plt.legend((p1, p2), ("Honest agents", "Dishonest agents"))
+        plt.tight_layout()
         plt.show()
 
     def run(self):

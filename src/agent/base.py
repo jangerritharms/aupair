@@ -29,6 +29,8 @@ class BaseAgent(MessageProcessor):
     for replying to blocks, registering and unregistering are included.
     """
 
+    _type = "Base"
+
     def __init__(self):
         """Creates a new BaseAgent, creates keys and declares class attributes.
         """

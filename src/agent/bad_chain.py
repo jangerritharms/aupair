@@ -8,6 +8,8 @@ from src.communication.messages import NewMessage
 
 class BadChainProtectAgent(ProtectAgent):
 
+    _type = "BadChain"
+
     def request_protect(self, partner=None):
         while partner is None or partner == self.get_info() or \
                 partner.address in self.open_requests:
