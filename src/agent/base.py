@@ -3,6 +3,7 @@ import random
 import time
 import pickle
 import logging
+import signal
 
 from tornado import ioloop
 
@@ -180,6 +181,10 @@ class BaseAgent(MessageProcessor):
                                     blocks=[block.as_message() for block in blocks])
             f.write(database.SerializeToString())
 
+    def on_shutdown(self):
+        print('Shutting down')
+        self.loop.stop()
+
     def run(self):
         """
         Starts the main loop of the agent.
@@ -193,6 +198,8 @@ class BaseAgent(MessageProcessor):
         self.loop.call_later(self.options['startup_time'], self.request_agents)
         cb_step = ioloop.PeriodicCallback(self.step, 1000)
         self.loop.call_later(self.options['startup_time'] + 5, cb_step.start)
+        signal.signal(signal.SIGINT,
+                      lambda sig, frame: self.loop.add_callback_from_signal(self.on_shutdown))
         self.loop.start()
 
         self.write_data()

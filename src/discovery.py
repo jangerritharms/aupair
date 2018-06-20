@@ -4,6 +4,7 @@ Module defining the discovery server.
 import logging
 import json
 import zmq
+import signal
 
 from zmq.eventloop.zmqstream import ZMQStream
 from tornado import ioloop
@@ -88,6 +89,10 @@ class DiscoveryServer(MessageProcessor):
         agent = AgentInfo.from_message(msg.agent)
         self.agents.remove(agent)
 
+    def on_shutdown(self):
+        print('Shutting down')
+        self.loop.stop()
+
     def run(self):
         """The main loop for the discovery server.
         """
@@ -96,4 +101,6 @@ class DiscoveryServer(MessageProcessor):
         self.loop = ioloop.IOLoop.current()
         cb_stop_condition = ioloop.PeriodicCallback(self.stop_condition, 1000)
         cb_stop_condition.start()
+        signal.signal(signal.SIGINT,
+                      lambda sig, frame: self.loop.add_callback_from_signal(self.on_shutdown))
         self.loop.start()
