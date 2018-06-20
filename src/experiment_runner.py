@@ -42,6 +42,7 @@ class ExperimentRunner(object):
         logging.basicConfig(format=FORMAT)
         db_logger = logging.getLogger("Database")
         db_logger.propagate = False
+        logging.disable(logging.INFO)
         contents = config.read()
         self.options = json.loads(contents)
 
