@@ -69,6 +69,9 @@ class Database(TrustChainDB):
                          sequence_begin,
                          sequence_begin + sequence_length))
 
+    def get_all_blocks(self):
+        return self._getall('', ())
+
     def index(self, index):
         """Returns a subset of the database indexed by the passed index.
 

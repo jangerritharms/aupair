@@ -101,3 +101,60 @@ class TestBlockIndex(unittest.TestCase):
 
         self.assertEqual(type(message), msg.BlockIndex)
         self.assertEqual(len(message.entries), 2)
+
+    def test6(self):
+        "can add two indices"
+        key_a = generate_key()
+        key_b = generate_key()
+        key_c = generate_key()
+
+        index = BlockIndex([(key_a, [1, 2, 3, 4]), (key_b, [12])])
+        partner_index = BlockIndex([(key_a, [1, 2]), (key_c, [12])])
+
+        add1 = index + partner_index
+        self.assertEqual(type(add1), BlockIndex)
+        self.assertEqual(len(add1.entries), 3)
+        index_a = dict(add1.entries).get(key_a)
+        self.assertNotEqual(index_a, None)
+        self.assertEqual(index_a, range(1, 5))
+        index_b = dict(add1.entries).get(key_b)
+        self.assertNotEqual(index_b, None)
+        self.assertEqual(index_b, range(12, 13))
+        index_c = dict(add1.entries).get(key_c)
+        self.assertNotEqual(index_c, None)
+        self.assertEqual(index_c, range(12, 13))
+
+    def test7(self):
+        "can add an empty with a non-empty index"
+        key_a = generate_key()
+        key_b = generate_key()
+        key_c = generate_key()
+
+        add1 = BlockIndex()
+        partner_index = BlockIndex([(key_a, [1])])
+
+        add1 += partner_index
+        self.assertEqual(type(add1), BlockIndex)
+        self.assertEqual(len(add1.entries), 1)
+        index_a = dict(add1.entries).get(key_a)
+        self.assertNotEqual(index_a, None)
+        self.assertEqual(index_a, range(1, 2))
+
+    def test8(self):
+        "can add two of the same index"
+        key_a = generate_key()
+        key_b = generate_key()
+        key_c = generate_key()
+
+        index = BlockIndex([(key_a, [1, 2]), (key_c, [12])])
+        partner_index = BlockIndex([(key_a, [1, 2]), (key_c, [12])])
+
+        add1 = partner_index + index
+        self.assertEqual(type(add1), BlockIndex)
+        self.assertEqual(len(add1.entries), 2)
+        index_a = dict(add1.entries).get(key_a)
+        self.assertNotEqual(index_a, None)
+        self.assertEqual(index_a, range(1, 3))
+        index_c = dict(add1.entries).get(key_c)
+        self.assertNotEqual(index_c, None)
+        self.assertEqual(index_c, range(12, 13))

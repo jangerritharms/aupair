@@ -59,7 +59,7 @@ class BlockIndex(object):
 
     @classmethod
     def from_message(cls, message):
-        return cls([(entry.public_key, range(entry.begin, entry.end+1))
+        return cls([(entry.public_key, [num for num in entry.sequence_numbers])
                     for entry in message.entries])
 
     def __sub__(self, other):
@@ -99,12 +99,53 @@ class BlockIndex(object):
 
         return BlockIndex(exchange)
 
+    def __add__(self, other):
+        """Returns the union of both indexes.
+
+        Arguments:
+            other {BlockIndex} -- The index which shall be subtracted
+        """
+
+        own_index = sorted(self.entries, key=lambda x: x[0])
+        other_index = sorted(other.entries, key=lambda x: x[0])
+
+        i = 0
+        j = 0
+        exchange = []
+        while i < len(own_index) and j < len(other_index):
+            own_key = own_index[i][0]
+            other_key = other_index[j][0]
+
+            if own_key == other_key:
+                union = list(set(own_index[i][1]) | set(other_index[j][1]))
+                if len(union) > 0:
+                    exchange.append((own_key, union))
+                i += 1
+                j += 1
+            elif own_key < other_key:
+                exchange.append((own_key, own_index[i][1]))
+                i += 1
+            else:
+                exchange.append((other_key, other_index[j][1]))
+                j += 1
+
+        while i < len(own_index):
+            own_key = own_index[i][0]
+            exchange.append((own_key, own_index[i][1]))
+            i += 1
+
+        while j < len(other_index):
+            other_key = other_index[j][0]
+            exchange.append((other_key, other_index[j][1]))
+            j += 1
+
+        return BlockIndex(exchange)
+
     def as_message(self):
         """Creates a BlockIndex message from the given object.
         """
         message_entries = [msg.BlockIndexEntry(public_key=entry[0],
-                                               begin=min(entry[1]),
-                                               end=max(entry[1])) for entry in self.entries]
+                                               sequence_numbers=entry[1]) for entry in self.entries]
         return msg.BlockIndex(entries=message_entries)
 
     def to_database_args(self):

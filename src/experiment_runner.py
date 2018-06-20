@@ -10,6 +10,7 @@ from multiprocessing import Process
 import src.analysis.agent
 from src.agent.base import BaseAgent
 from src.agent.protect import ProtectAgent
+from src.agent.simple_protect import ProtectSimpleAgent
 from src.agent.bad_chain import BadChainProtectAgent
 from src.discovery import DiscoveryServer, spawn_discovery_server
 
@@ -41,7 +42,6 @@ class ExperimentRunner(object):
         logging.basicConfig(format=FORMAT)
         db_logger = logging.getLogger("Database")
         db_logger.propagate = False
-        logging.disable(logging.INFO)
         contents = config.read()
         self.options = json.loads(contents)
 
@@ -58,14 +58,15 @@ class ExperimentRunner(object):
         for db_file in files:
             agent = src.analysis.agent.Agent.from_file(os.path.join('data', db_file))
             agents.append(agent)
-            if agent.info.type == "Protect":
+            if agent.info.type == "ProtectSimple":
                 honest_agents.append(agent)
             elif agent.info.type == "BadChain":
                 dishonest_agents.append(agent)
 
         keys = [agent.info.public_key.as_readable() for agent in agents]
-        honest_transactions = [agent.transactions_blocks()for agent in honest_agents]
+        honest_transactions = [agent.transactions_blocks() for agent in honest_agents]
         dishonest_transactions = [agent.transactions_blocks() for agent in dishonest_agents]
+        print len(dishonest_transactions)
 
         p1 = plt.bar(range(len(honest_agents)), honest_transactions, 0.35, color="#57a773")
         p2 = plt.bar(range(len(honest_agents), len(honest_agents) + len(dishonest_agents)),
@@ -111,7 +112,7 @@ class ExperimentRunner(object):
         discovery_process.start()
 
         for _ in range(self.options['honest_nodes']):
-            agent = ProtectAgent()
+            agent = ProtectSimpleAgent()
             next_port = self.options['node_port_range_begin'] + len(self.agent_processes)
             agent.setup(self.options, next_port)
             agent_process = Process(target=agent.run)

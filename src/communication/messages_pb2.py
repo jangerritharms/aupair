@@ -19,7 +19,7 @@ _sym_db = _symbol_database.Default()
 DESCRIPTOR = _descriptor.FileDescriptor(
   name='src/communication/messages.proto',
   package='',
-  serialized_pb=_b('\n src/communication/messages.proto\"\x07\n\x05\x45mpty\">\n\tAgentInfo\x12\x12\n\npublic_key\x18\x01 \x02(\t\x12\x0f\n\x07\x61\x64\x64ress\x18\x02 \x02(\t\x12\x0c\n\x04type\x18\x03 \x02(\t\"%\n\x08Register\x12\x19\n\x05\x61gent\x18\x01 \x02(\x0b\x32\n.AgentInfo\"\'\n\nUnregister\x12\x19\n\x05\x61gent\x18\x01 \x02(\x0b\x32\n.AgentInfo\"(\n\nAgentReply\x12\x1a\n\x06\x61gents\x18\x01 \x03(\x0b\x32\n.AgentInfo\"\xb4\x02\n\x0eWrapperMessage\x12\x13\n\x04type\x18\x01 \x02(\x0e\x32\x05.Type\x12\x0f\n\x07\x61\x64\x64ress\x18\x02 \x02(\t\x12\x17\n\x05\x65mpty\x18\n \x01(\x0b\x32\x06.EmptyH\x00\x12\x1d\n\x08register\x18\x0b \x01(\x0b\x32\t.RegisterH\x00\x12\"\n\x0b\x61gent_reply\x18\x0c \x01(\x0b\x32\x0b.AgentReplyH\x00\x12!\n\nunregister\x18\r \x01(\x0b\x32\x0b.UnregisterH\x00\x12\x17\n\x05\x62lock\x18\x0e \x01(\x0b\x32\x06.BlockH\x00\x12\x17\n\x02\x64\x62\x18\x0f \x01(\x0b\x32\t.DatabaseH\x00\x12\x1c\n\x05index\x18\x10 \x01(\x0b\x32\x0b.BlockIndexH\x00\x12&\n\x0b\x63hain_index\x18\x11 \x01(\x0b\x32\x0f.ChainAndBlocksH\x00\x42\x05\n\x03msg\"\xb4\x01\n\x05\x42lock\x12\x0f\n\x07payload\x18\x01 \x02(\x0c\x12\x12\n\npublic_key\x18\x02 \x02(\x0c\x12\x17\n\x0fsequence_number\x18\x03 \x02(\x05\x12\x17\n\x0flink_public_key\x18\x04 \x02(\x0c\x12\x1c\n\x14link_sequence_number\x18\x05 \x02(\x05\x12\x15\n\rprevious_hash\x18\x06 \x02(\x0c\x12\x11\n\tsignature\x18\x07 \x02(\x0c\x12\x0c\n\x04hash\x18\x08 \x01(\x0c\"<\n\x08\x44\x61tabase\x12\x18\n\x04info\x18\x01 \x02(\x0b\x32\n.AgentInfo\x12\x16\n\x06\x62locks\x18\x02 \x03(\x0b\x32\x06.Block\"A\n\x0f\x42lockIndexEntry\x12\x12\n\npublic_key\x18\x01 \x02(\x0c\x12\r\n\x05\x62\x65gin\x18\x02 \x02(\x05\x12\x0b\n\x03\x65nd\x18\x03 \x01(\x05\"/\n\nBlockIndex\x12!\n\x07\x65ntries\x18\x01 \x03(\x0b\x32\x10.BlockIndexEntry\"?\n\x0e\x43hainAndBlocks\x12\x15\n\x05\x63hain\x18\x01 \x03(\x0b\x32\x06.Block\x12\x16\n\x06\x62locks\x18\x02 \x03(\x0b\x32\x06.Block*\xa1\x02\n\x04Type\x12\x0c\n\x08REGISTER\x10\x01\x12\x0f\n\x0b\x41GENT_REPLY\x10\x02\x12\x11\n\rAGENT_REQUEST\x10\x03\x12\x0e\n\nUNREGISTER\x10\x04\x12\x12\n\x0e\x42LOCK_PROPOSAL\x10\x05\x12\x13\n\x0f\x42LOCK_AGREEMENT\x10\x06\x12\x11\n\rPROTECT_CHAIN\x10\x07\x12\x1a\n\x16PROTECT_BLOCKS_REQUEST\x10\x08\x12\x18\n\x14PROTECT_BLOCKS_REPLY\x10\t\x12\x18\n\x14PROTECT_CHAIN_BLOCKS\x10\n\x12\x1a\n\x16PROTECT_BLOCK_PROPOSAL\x10\x0b\x12\x1b\n\x17PROTECT_BLOCK_AGREEMENT\x10\x0c\x12\x12\n\x0ePROTECT_REJECT\x10\r')
+  serialized_pb=_b('\n src/communication/messages.proto\"\x07\n\x05\x45mpty\">\n\tAgentInfo\x12\x12\n\npublic_key\x18\x01 \x02(\t\x12\x0f\n\x07\x61\x64\x64ress\x18\x02 \x02(\t\x12\x0c\n\x04type\x18\x03 \x02(\t\"%\n\x08Register\x12\x19\n\x05\x61gent\x18\x01 \x02(\x0b\x32\n.AgentInfo\"\'\n\nUnregister\x12\x19\n\x05\x61gent\x18\x01 \x02(\x0b\x32\n.AgentInfo\"(\n\nAgentReply\x12\x1a\n\x06\x61gents\x18\x01 \x03(\x0b\x32\n.AgentInfo\"\xd8\x02\n\x0eWrapperMessage\x12\x13\n\x04type\x18\x01 \x02(\x0e\x32\x05.Type\x12\x0f\n\x07\x61\x64\x64ress\x18\x02 \x02(\t\x12\x17\n\x05\x65mpty\x18\n \x01(\x0b\x32\x06.EmptyH\x00\x12\x1d\n\x08register\x18\x0b \x01(\x0b\x32\t.RegisterH\x00\x12\"\n\x0b\x61gent_reply\x18\x0c \x01(\x0b\x32\x0b.AgentReplyH\x00\x12!\n\nunregister\x18\r \x01(\x0b\x32\x0b.UnregisterH\x00\x12\x17\n\x05\x62lock\x18\x0e \x01(\x0b\x32\x06.BlockH\x00\x12\x17\n\x02\x64\x62\x18\x0f \x01(\x0b\x32\t.DatabaseH\x00\x12\x1c\n\x05index\x18\x10 \x01(\x0b\x32\x0b.BlockIndexH\x00\x12&\n\x0b\x63hain_index\x18\x11 \x01(\x0b\x32\x0f.ChainAndBlocksH\x00\x12\"\n\x08\x65x_index\x18\x12 \x01(\x0b\x32\x0e.ExchangeIndexH\x00\x42\x05\n\x03msg\"\xb4\x01\n\x05\x42lock\x12\x0f\n\x07payload\x18\x01 \x02(\x0c\x12\x12\n\npublic_key\x18\x02 \x02(\x0c\x12\x17\n\x0fsequence_number\x18\x03 \x02(\x05\x12\x17\n\x0flink_public_key\x18\x04 \x02(\x0c\x12\x1c\n\x14link_sequence_number\x18\x05 \x02(\x05\x12\x15\n\rprevious_hash\x18\x06 \x02(\x0c\x12\x11\n\tsignature\x18\x07 \x02(\x0c\x12\x0c\n\x04hash\x18\x08 \x01(\x0c\"<\n\x08\x44\x61tabase\x12\x18\n\x04info\x18\x01 \x02(\x0b\x32\n.AgentInfo\x12\x16\n\x06\x62locks\x18\x02 \x03(\x0b\x32\x06.Block\"D\n\x12\x45xchangeIndexEntry\x12\x12\n\nblock_hash\x18\x01 \x02(\x0c\x12\x1a\n\x05index\x18\x02 \x02(\x0b\x32\x0b.BlockIndex\"5\n\rExchangeIndex\x12$\n\x07\x65ntries\x18\x01 \x03(\x0b\x32\x13.ExchangeIndexEntry\"?\n\x0f\x42lockIndexEntry\x12\x12\n\npublic_key\x18\x01 \x02(\x0c\x12\x18\n\x10sequence_numbers\x18\x02 \x03(\x05\"/\n\nBlockIndex\x12!\n\x07\x65ntries\x18\x01 \x03(\x0b\x32\x10.BlockIndexEntry\"?\n\x0e\x43hainAndBlocks\x12\x15\n\x05\x63hain\x18\x01 \x03(\x0b\x32\x06.Block\x12\x16\n\x06\x62locks\x18\x02 \x03(\x0b\x32\x06.Block*\xd5\x02\n\x04Type\x12\x0c\n\x08REGISTER\x10\x01\x12\x0f\n\x0b\x41GENT_REPLY\x10\x02\x12\x11\n\rAGENT_REQUEST\x10\x03\x12\x0e\n\nUNREGISTER\x10\x04\x12\x12\n\x0e\x42LOCK_PROPOSAL\x10\x05\x12\x13\n\x0f\x42LOCK_AGREEMENT\x10\x06\x12\x11\n\rPROTECT_CHAIN\x10\x07\x12\x1a\n\x16PROTECT_BLOCKS_REQUEST\x10\x08\x12\x18\n\x14PROTECT_BLOCKS_REPLY\x10\t\x12\x18\n\x14PROTECT_CHAIN_BLOCKS\x10\n\x12\x1a\n\x16PROTECT_BLOCK_PROPOSAL\x10\x0b\x12\x1b\n\x17PROTECT_BLOCK_AGREEMENT\x10\x0c\x12\x12\n\x0ePROTECT_REJECT\x10\r\x12\x19\n\x15PROTECT_INDEX_REQUEST\x10\x0e\x12\x17\n\x13PROTECT_INDEX_REPLY\x10\x0f')
 )
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
@@ -81,11 +81,19 @@ _TYPE = _descriptor.EnumDescriptor(
       name='PROTECT_REJECT', index=12, number=13,
       options=None,
       type=None),
+    _descriptor.EnumValueDescriptor(
+      name='PROTECT_INDEX_REQUEST', index=13, number=14,
+      options=None,
+      type=None),
+    _descriptor.EnumValueDescriptor(
+      name='PROTECT_INDEX_REPLY', index=14, number=15,
+      options=None,
+      type=None),
   ],
   containing_type=None,
   options=None,
-  serialized_start=969,
-  serialized_end=1258,
+  serialized_start=1128,
+  serialized_end=1469,
 )
 _sym_db.RegisterEnumDescriptor(_TYPE)
 
@@ -103,6 +111,8 @@ PROTECT_CHAIN_BLOCKS = 10
 PROTECT_BLOCK_PROPOSAL = 11
 PROTECT_BLOCK_AGREEMENT = 12
 PROTECT_REJECT = 13
+PROTECT_INDEX_REQUEST = 14
+PROTECT_INDEX_REPLY = 15
 
 
 
@@ -340,6 +350,13 @@ _WRAPPERMESSAGE = _descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
+    _descriptor.FieldDescriptor(
+      name='ex_index', full_name='WrapperMessage.ex_index', index=10,
+      number=18, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
   ],
   extensions=[
   ],
@@ -355,7 +372,7 @@ _WRAPPERMESSAGE = _descriptor.Descriptor(
       index=0, containing_type=None, fields=[]),
   ],
   serialized_start=232,
-  serialized_end=540,
+  serialized_end=576,
 )
 
 
@@ -433,8 +450,8 @@ _BLOCK = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=543,
-  serialized_end=723,
+  serialized_start=579,
+  serialized_end=759,
 )
 
 
@@ -470,8 +487,75 @@ _DATABASE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=725,
-  serialized_end=785,
+  serialized_start=761,
+  serialized_end=821,
+)
+
+
+_EXCHANGEINDEXENTRY = _descriptor.Descriptor(
+  name='ExchangeIndexEntry',
+  full_name='ExchangeIndexEntry',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='block_hash', full_name='ExchangeIndexEntry.block_hash', index=0,
+      number=1, type=12, cpp_type=9, label=2,
+      has_default_value=False, default_value=_b(""),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+    _descriptor.FieldDescriptor(
+      name='index', full_name='ExchangeIndexEntry.index', index=1,
+      number=2, type=11, cpp_type=10, label=2,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  options=None,
+  is_extendable=False,
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=823,
+  serialized_end=891,
+)
+
+
+_EXCHANGEINDEX = _descriptor.Descriptor(
+  name='ExchangeIndex',
+  full_name='ExchangeIndex',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='entries', full_name='ExchangeIndex.entries', index=0,
+      number=1, type=11, cpp_type=10, label=3,
+      has_default_value=False, default_value=[],
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  options=None,
+  is_extendable=False,
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=893,
+  serialized_end=946,
 )
 
 
@@ -490,16 +574,9 @@ _BLOCKINDEXENTRY = _descriptor.Descriptor(
       is_extension=False, extension_scope=None,
       options=None),
     _descriptor.FieldDescriptor(
-      name='begin', full_name='BlockIndexEntry.begin', index=1,
-      number=2, type=5, cpp_type=1, label=2,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      options=None),
-    _descriptor.FieldDescriptor(
-      name='end', full_name='BlockIndexEntry.end', index=2,
-      number=3, type=5, cpp_type=1, label=1,
-      has_default_value=False, default_value=0,
+      name='sequence_numbers', full_name='BlockIndexEntry.sequence_numbers', index=1,
+      number=2, type=5, cpp_type=1, label=3,
+      has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
@@ -514,8 +591,8 @@ _BLOCKINDEXENTRY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=787,
-  serialized_end=852,
+  serialized_start=948,
+  serialized_end=1011,
 )
 
 
@@ -544,8 +621,8 @@ _BLOCKINDEX = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=854,
-  serialized_end=901,
+  serialized_start=1013,
+  serialized_end=1060,
 )
 
 
@@ -581,8 +658,8 @@ _CHAINANDBLOCKS = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=903,
-  serialized_end=966,
+  serialized_start=1062,
+  serialized_end=1125,
 )
 
 _REGISTER.fields_by_name['agent'].message_type = _AGENTINFO
@@ -597,6 +674,7 @@ _WRAPPERMESSAGE.fields_by_name['block'].message_type = _BLOCK
 _WRAPPERMESSAGE.fields_by_name['db'].message_type = _DATABASE
 _WRAPPERMESSAGE.fields_by_name['index'].message_type = _BLOCKINDEX
 _WRAPPERMESSAGE.fields_by_name['chain_index'].message_type = _CHAINANDBLOCKS
+_WRAPPERMESSAGE.fields_by_name['ex_index'].message_type = _EXCHANGEINDEX
 _WRAPPERMESSAGE.oneofs_by_name['msg'].fields.append(
   _WRAPPERMESSAGE.fields_by_name['empty'])
 _WRAPPERMESSAGE.fields_by_name['empty'].containing_oneof = _WRAPPERMESSAGE.oneofs_by_name['msg']
@@ -621,8 +699,13 @@ _WRAPPERMESSAGE.fields_by_name['index'].containing_oneof = _WRAPPERMESSAGE.oneof
 _WRAPPERMESSAGE.oneofs_by_name['msg'].fields.append(
   _WRAPPERMESSAGE.fields_by_name['chain_index'])
 _WRAPPERMESSAGE.fields_by_name['chain_index'].containing_oneof = _WRAPPERMESSAGE.oneofs_by_name['msg']
+_WRAPPERMESSAGE.oneofs_by_name['msg'].fields.append(
+  _WRAPPERMESSAGE.fields_by_name['ex_index'])
+_WRAPPERMESSAGE.fields_by_name['ex_index'].containing_oneof = _WRAPPERMESSAGE.oneofs_by_name['msg']
 _DATABASE.fields_by_name['info'].message_type = _AGENTINFO
 _DATABASE.fields_by_name['blocks'].message_type = _BLOCK
+_EXCHANGEINDEXENTRY.fields_by_name['index'].message_type = _BLOCKINDEX
+_EXCHANGEINDEX.fields_by_name['entries'].message_type = _EXCHANGEINDEXENTRY
 _BLOCKINDEX.fields_by_name['entries'].message_type = _BLOCKINDEXENTRY
 _CHAINANDBLOCKS.fields_by_name['chain'].message_type = _BLOCK
 _CHAINANDBLOCKS.fields_by_name['blocks'].message_type = _BLOCK
@@ -634,6 +717,8 @@ DESCRIPTOR.message_types_by_name['AgentReply'] = _AGENTREPLY
 DESCRIPTOR.message_types_by_name['WrapperMessage'] = _WRAPPERMESSAGE
 DESCRIPTOR.message_types_by_name['Block'] = _BLOCK
 DESCRIPTOR.message_types_by_name['Database'] = _DATABASE
+DESCRIPTOR.message_types_by_name['ExchangeIndexEntry'] = _EXCHANGEINDEXENTRY
+DESCRIPTOR.message_types_by_name['ExchangeIndex'] = _EXCHANGEINDEX
 DESCRIPTOR.message_types_by_name['BlockIndexEntry'] = _BLOCKINDEXENTRY
 DESCRIPTOR.message_types_by_name['BlockIndex'] = _BLOCKINDEX
 DESCRIPTOR.message_types_by_name['ChainAndBlocks'] = _CHAINANDBLOCKS
@@ -694,6 +779,20 @@ Database = _reflection.GeneratedProtocolMessageType('Database', (_message.Messag
   # @@protoc_insertion_point(class_scope:Database)
   ))
 _sym_db.RegisterMessage(Database)
+
+ExchangeIndexEntry = _reflection.GeneratedProtocolMessageType('ExchangeIndexEntry', (_message.Message,), dict(
+  DESCRIPTOR = _EXCHANGEINDEXENTRY,
+  __module__ = 'src.communication.messages_pb2'
+  # @@protoc_insertion_point(class_scope:ExchangeIndexEntry)
+  ))
+_sym_db.RegisterMessage(ExchangeIndexEntry)
+
+ExchangeIndex = _reflection.GeneratedProtocolMessageType('ExchangeIndex', (_message.Message,), dict(
+  DESCRIPTOR = _EXCHANGEINDEX,
+  __module__ = 'src.communication.messages_pb2'
+  # @@protoc_insertion_point(class_scope:ExchangeIndex)
+  ))
+_sym_db.RegisterMessage(ExchangeIndex)
 
 BlockIndexEntry = _reflection.GeneratedProtocolMessageType('BlockIndexEntry', (_message.Message,), dict(
   DESCRIPTOR = _BLOCKINDEXENTRY,

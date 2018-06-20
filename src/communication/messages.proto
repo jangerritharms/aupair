@@ -14,6 +14,8 @@ enum Type {
     PROTECT_BLOCK_PROPOSAL = 11;
     PROTECT_BLOCK_AGREEMENT = 12;
     PROTECT_REJECT = 13;
+    PROTECT_INDEX_REQUEST = 14;
+    PROTECT_INDEX_REPLY = 15;
 }
 
 message Empty {}
@@ -49,6 +51,7 @@ message WrapperMessage{
         Database db = 15;
         BlockIndex index = 16;
         ChainAndBlocks chain_index = 17;
+        ExchangeIndex ex_index = 18;
     }
 }
 
@@ -68,11 +71,18 @@ message Database {
     repeated Block blocks = 2;
 }
 
+message ExchangeIndexEntry {
+    required bytes block_hash = 1;
+    required BlockIndex index = 2;
+}
+
+message ExchangeIndex {
+    repeated ExchangeIndexEntry entries = 1;
+}
+
 message BlockIndexEntry {
     required bytes public_key = 1;
-    required int32 begin = 2;
-
-    optional int32 end = 3;
+    repeated int32 sequence_numbers = 2;
 }
 
 message BlockIndex {

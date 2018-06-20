@@ -70,7 +70,9 @@ type_to_attribute = {
     msg.PROTECT_CHAIN_BLOCKS: "chain_index",
     msg.PROTECT_BLOCK_PROPOSAL: "block",
     msg.PROTECT_BLOCK_AGREEMENT: "block",
-    msg.PROTECT_REJECT: "empty"
+    msg.PROTECT_REJECT: "empty",
+    msg.PROTECT_INDEX_REQUEST: "empty",
+    msg.PROTECT_INDEX_REPLY: "ex_index"
 }
 
 
