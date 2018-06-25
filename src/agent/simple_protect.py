@@ -232,7 +232,9 @@ class ProtectSimpleAgent(BaseAgent):
             own_chain = self.database.get_chain(self.public_key)
             own_index = BlockIndex.from_blocks(self.database.get_all_blocks())
             partner_index = self.request_cache.get(sender).index
+            self.logger.debug("Calculated partner index: %s", partner_index)
             index = (own_index - partner_index)
+            self.logger.debug("Calculated own_index: %s", own_index)
 
             sub_database = []
             if len(index) == 0:
@@ -243,6 +245,7 @@ class ProtectSimpleAgent(BaseAgent):
                 self.request_cache.get(sender).transfer_down = blocks_to_hash(blocks)
                 self.request_cache.get(sender).transfer_down_index = index
 
+            self.logger.debug("Sending blocks: %s", index)
             db = msg.ChainAndBlocks(chain=[block.as_message() for block in own_chain],
                                     blocks=[block.as_message() for block in sub_database],
                                     exchange=self.exchange_storage.as_message())
@@ -351,6 +354,24 @@ class ProtectSimpleAgent(BaseAgent):
 
         self.logger.info("Protect completed with %s", sender)
 
+    @MessageHandler(msg.BLOCK_PROPOSAL)
+    def block_proposal(self, sender, body):
+        block = Block.from_message(body)
+        index = BlockIndex.from_blocks([block])
+        payload = {'transfer_down': blocks_to_hash([block]).encode('hex')}
+        exchange_block = self.block_factory.create_new(self.get_info().public_key, payload)
+        self.exchange_storage.add_exchange(exchange_block, index)
+        super(ProtectSimpleAgent, self).block_proposal(sender, body)
+
+    @MessageHandler(msg.BLOCK_AGREEMENT)
+    def block_confirm(self, sender, body):
+        block = Block.from_message(body)
+        index = BlockIndex.from_blocks([block])
+        payload = {'transfer_down': blocks_to_hash([block]).encode('hex')}
+        exchange_block = self.block_factory.create_new(self.get_info().public_key, payload)
+        self.exchange_storage.add_exchange(exchange_block, index)
+        super(ProtectSimpleAgent, self).block_confirm(sender, body)
+
     @MessageHandler(msg.PROTECT_REJECT)
     def protect_reject(self, sender, body):
         """Handles a received PROTECT_REJECT message. This message is sent when the agent that
@@ -410,14 +431,9 @@ class ProtectSimpleAgent(BaseAgent):
         # get exchange blocks on the chain
         exchange_summary_blocks = [block for block in chain
                                    if block.transaction.get('transfer_down') is not None]
-        
-        self.logger.debug("Chain: %s", chain)
-        self.logger.debug("Exchange: %s", exchange)
 
         # check 1: exchange and exchange blocks have the same length
         if not len(exchange_summary_blocks) <= len(exchange):
-            self.logger.error('\n'.join(['%s' % block for block in chain]))
-            self.logger.error('exchange: %s', exchange.exchanges)
             self.logger.error("exchanges and exchange blocks are not the same length")
             return False
 
@@ -426,13 +442,13 @@ class ProtectSimpleAgent(BaseAgent):
         for block in exchange_summary_blocks:
             if block.hash in exchange.exchanges:
                 if len(exchange.exchanges[block.hash]) == 0:
-                    self.logger.debug("Empty exchange")
                     exchange_blocks.append([])
                 else:
-                    self.logger.debug(exchange.exchanges[block.hash].to_database_args())
                     blocks = self.database.index(exchange.exchanges[block.hash])
+
                     if len(blocks) == 0:
                         self.logger.error('Blocks not found in database')
+
                     exchange_blocks.append(self.database.index(exchange.exchanges[block.hash]))
             else:
                 self.logger.error('Block is not mentioned in exchanges.')
