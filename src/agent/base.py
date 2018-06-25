@@ -17,6 +17,7 @@ from src.public_key import PublicKey
 from src.database import Database
 from src.chain.block import Block
 from src.chain.block_factory import BlockFactory
+from src.chain.index import BlockIndex
 from src.agent.info import AgentInfo
 from src.communication.interface import CommunicationInterface
 from src.communication.messages import Message, MessageTypes, NewMessage
@@ -130,6 +131,9 @@ class BaseAgent(MessageProcessor):
         new_block = self.block_factory.create_linked(block)
         self.com.send(sender, NewMessage(msg.BLOCK_AGREEMENT, new_block.as_message()))
 
+        self.logger.debug("Block database: %s",
+                          BlockIndex.from_blocks(self.database.get_all_blocks()))
+
     @MessageHandler(msg.BLOCK_AGREEMENT)
     def block_confirm(self, sender, body):
         """Message handler for the BLOCK_AGREEMENT message which the agent receives from another
@@ -143,6 +147,8 @@ class BaseAgent(MessageProcessor):
         block = Block.from_message(body)
 
         self.database.add(block)
+        self.logger.debug("Block database: %s",
+                          BlockIndex.from_blocks(self.database.get_all_blocks()))
 
     def register(self):
         """Sends a registration message to the discovery server with the agent's contact info. This
