@@ -37,6 +37,16 @@ class Database(TrustChainDB):
                 if existing.hash != block.hash:
                     logging.warning('DOUBLE SPENDING DETECTED')
 
+    def add_blocks(self, blocks):
+        """Addes multiple blocks to the database.
+        
+        Arguments:
+            blocks {[Blocks]} -- Blocks to be added to the database.
+        """
+
+        for block in blocks:
+            self.add(block)
+
     def get_chain(self, key):
         """Retrives the chain (all blocks authored) of the agent with the given
         public key.
