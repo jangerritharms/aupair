@@ -92,4 +92,5 @@ message BlockIndex {
 message ChainAndBlocks {
     repeated Block chain = 1;
     repeated Block blocks = 2;
+    required ExchangeIndex exchange = 3;
 }

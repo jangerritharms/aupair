@@ -1,6 +1,9 @@
 import random
 import logging
 from collections import Counter
+from hashlib import sha256
+
+from src.pyipv8.ipv8.attestation.trustchain.block import UNKNOWN_SEQ
 
 import src.communication.messages_pb2 as msg
 
@@ -11,6 +14,20 @@ from src.communication.messages import NewMessage
 from src.chain.index import BlockIndex
 from src.agent.exchange_storage import ExchangeStorage
 from src.agent.request_cache import RequestCache
+
+
+def blocks_to_hash(blocks):
+    """Takes a list of blocks and creates a hash that includes the hashes of all blocks contained.
+
+    Arguments:
+        blocks {[Block]} -- List of blocks.
+    """
+
+    list_of_hashes = sorted([block.hash for block in blocks])
+    hash_string = ''.join(list_of_hashes)
+    if hash_string == '':
+        return ''
+    return sha256(hash_string).digest()
 
 
 class ProtectSimpleAgent(BaseAgent):
@@ -43,7 +60,7 @@ class ProtectSimpleAgent(BaseAgent):
             partner = random.choice(self.agents)
 
         if self.request_cache.get(partner.address) is not None:
-            self.logger.debug('Request already open, ignoring request with %s', partner.address)
+            self.logger.warning('Request already open, ignoring request with %s', partner.address)
             return
         if partner.address in self.ignore_list:
             return
@@ -55,7 +72,7 @@ class ProtectSimpleAgent(BaseAgent):
         self.request_cache.new(partner.address)
         self.com.send(partner.address, NewMessage(msg.PROTECT_CHAIN, db))
 
-        self.logger.debug("[0] Requesting PROTECT with %s", partner.address)
+        self.logger.info("Start interaction with %s", partner.address)
 
     @MessageHandler(msg.PROTECT_CHAIN)
     def protect_chain(self, sender, body):
@@ -73,7 +90,7 @@ class ProtectSimpleAgent(BaseAgent):
         """
 
         if self.request_cache.get(sender) is not None:
-            self.logger.debug('Request already open, ignoring request from %s', sender)
+            self.logger.warning('Request already open, ignoring request from %s', sender)
             self.com.send(sender, NewMessage(msg.PROTECT_REJECT, msg.Empty()))
             return
 
@@ -88,6 +105,7 @@ class ProtectSimpleAgent(BaseAgent):
         verification = self.verify_chain(chain)
 
         if verification:
+            self.logger.info("Verification of %s's chain succeeded", sender)
             self.com.send(sender, NewMessage(msg.PROTECT_INDEX_REQUEST, msg.Empty()))
         else:
             self.ignore_list.append(sender)
@@ -119,7 +137,7 @@ class ProtectSimpleAgent(BaseAgent):
         received which should add up to the hashes stored on the chain. If a request for the sender
         is found, the agent checks which blocks the initiator of the PROTECT exchange has that the
         checking agent is not aware of and requests those.
-        
+
         Arguments:
             sender {Address} -- Address string of the agent
             body {msg.ExchangeIndex} -- Body of the incoming message.
@@ -135,13 +153,18 @@ class ProtectSimpleAgent(BaseAgent):
         for block_hash, index in exchanges.exchanges.iteritems():
             partner_index = partner_index + index
         partner_index += BlockIndex.from_blocks(self.request_cache.get(sender).chain)
+        self.logger.debug("Calculated partner index: %s", partner_index)
 
         own_index = BlockIndex.from_blocks(self.database.get_all_blocks())
+        self.logger.debug("Calculated own_index: %s", own_index)
 
         db = (partner_index - own_index).as_message()
+
+        self.logger.debug("Requesting blocks: %s", (partner_index - own_index))
         self.com.send(sender, NewMessage(msg.PROTECT_BLOCKS_REQUEST, db))
 
         self.request_cache.get(sender).index = partner_index
+        self.request_cache.get(sender).exchanges = exchanges
 
     @MessageHandler(msg.PROTECT_BLOCKS_REQUEST)
     def protect_blocks_request(self, sender, body):
@@ -162,14 +185,19 @@ class ProtectSimpleAgent(BaseAgent):
 
         index = BlockIndex.from_message(body)
 
-        self.request_cache.get(sender).transfer_up = index
-        blocks = self.database.index(index)
+        blocks = []
+        if len(index) == 0:
+            self.request_cache.get(sender).transfer_up = ''
+            self.request_cache.get(sender).transfer_up_index = BlockIndex()
+        else:
+            blocks = self.database.index(index)
+            self.request_cache.get(sender).transfer_up = blocks_to_hash(blocks)
+            self.request_cache.get(sender).transfer_up_index = index
 
         db = msg.Database(info=self.get_info().as_message(),
                           blocks=[block.as_message() for block in blocks])
         self.com.send(sender, NewMessage(msg.PROTECT_BLOCKS_REPLY, db))
 
-        self.logger.debug("[2] Sending BLOCKS to %s", sender)
 
     @MessageHandler(msg.PROTECT_BLOCKS_REPLY)
     def protect_blocks_reply(self, sender, body):
@@ -177,10 +205,10 @@ class ProtectSimpleAgent(BaseAgent):
         received the blocks the initiator had more than himself. Now the responder can check that
         the blocks add up to all information of the agent as proven by the hashes of the exchange
         blocks on the chain of the initiator. If the check succeeds, the agent shows his agreement
-        by sending his own chain and blocks that he has above the initiator in a 
+        by sending his own chain and blocks that he has above the initiator in a
         msg.PROTECT_CHAIN_BLOCKS message. If the check fails, the agent sends a msg.PROTECT_REJECT
         message and adds the initiator to the ignore list.
-        
+
         Arguments:
             sender {Address} -- Address string of the agent.
             body {msg.Database} -- Body of the incoming message.
@@ -191,22 +219,36 @@ class ProtectSimpleAgent(BaseAgent):
             return
 
         blocks = [Block.from_message(block) for block in body.blocks]
+        
+        self.logger.debug("Blocks received: %s", BlockIndex.from_blocks(blocks))
+        self.database.add_blocks(blocks)
+        self.request_cache.get(sender).transfer_up = blocks_to_hash(blocks)
+        self.request_cache.get(sender).transfer_up_index = BlockIndex.from_blocks(blocks)
 
-        verification = self.verify_blocks(blocks)
+        verification = self.verify_exchange(self.request_cache.get(sender).chain,
+                                            self.request_cache.get(sender).exchanges)
 
         if verification:
             own_chain = self.database.get_chain(self.public_key)
             own_index = BlockIndex.from_blocks(self.database.get_all_blocks())
             partner_index = self.request_cache.get(sender).index
-            transfer_down = (own_index - partner_index)
-            self.request_cache.get(sender).transfer_down = transfer_down
-            sub_database = self.database.index(transfer_down)
+            index = (own_index - partner_index)
+
+            sub_database = []
+            if len(index) == 0:
+                self.request_cache.get(sender).transfer_up = ''
+                self.request_cache.get(sender).transfer_up_index = BlockIndex()
+            else:
+                sub_database = self.database.index(index)
+                self.request_cache.get(sender).transfer_down = blocks_to_hash(blocks)
+                self.request_cache.get(sender).transfer_down_index = index
 
             db = msg.ChainAndBlocks(chain=[block.as_message() for block in own_chain],
-                                    blocks=[block.as_message() for block in sub_database])
+                                    blocks=[block.as_message() for block in sub_database],
+                                    exchange=self.exchange_storage.as_message())
             self.com.send(sender, NewMessage(msg.PROTECT_CHAIN_BLOCKS, db))
 
-            self.logger.debug("[3] Sending CHAIN AND BLOCKS to %s", sender)
+            self.logger.info("Verification of %s's exchanges succeeded", sender)
         else:
             self.ignore_list.append(sender)
             self.com.send(sender, NewMessage(msg.PROTECT_REJECT, msg.Empty()))
@@ -230,23 +272,27 @@ class ProtectSimpleAgent(BaseAgent):
         if self.request_cache.get(sender) is None:
             self.logger.error('No open reqest found for this agent')
             return
+
         chain = [Block.from_message(block) for block in body.chain]
         blocks = [Block.from_message(block) for block in body.blocks]
+        exchanges = ExchangeStorage.from_message(body.exchange)
+        self.database.add_blocks(blocks)
+        self.request_cache.get(sender).transfer_down = blocks_to_hash(blocks)
 
-        verification = self.verify_chain_and_blocks(blocks)
+        verification = self.verify_exchange(chain, exchanges)
         transfer_down = BlockIndex.from_blocks(blocks)
 
         if verification:
             partner = next((a for a in self.agents if a.address == sender), None)
-            payload = {'transfer_up': self.request_cache.get(sender).transfer_up.db_pack(),
-                       'transfer_down': transfer_down.db_pack()}
+            payload = {'transfer_up': self.request_cache.get(sender).transfer_up.encode('hex'),
+                       'transfer_down': blocks_to_hash(blocks).encode('hex')}
             new_block = self.block_factory.create_new(partner.public_key, payload=payload)
             self.com.send(partner.address, NewMessage(msg.PROTECT_BLOCK_PROPOSAL,
                                                       new_block.as_message()))
-            self.exchange_storage.add_exchange(new_block,
-                                               self.request_cache.get(sender).transfer_up)
+            self.exchange_storage.add_exchange(new_block, transfer_down)
 
-            self.logger.debug("[4] Sending PROPOSAL to %s", sender)
+            self.logger.info("Verification of %s's exchanges succeeded", sender)
+
         else:
             self.ignore_list.append(sender)
             self.com.send(sender, NewMessage(msg.PROTECT_REJECT, msg.Empty()))
@@ -274,10 +320,10 @@ class ProtectSimpleAgent(BaseAgent):
         new_block = self.block_factory.create_linked(block)
         self.com.send(sender, NewMessage(msg.PROTECT_BLOCK_AGREEMENT, new_block.as_message()))
         self.exchange_storage.add_exchange(new_block,
-                                           self.request_cache.get(sender).transfer_down)
+                                           self.request_cache.get(sender).transfer_up_index)
 
         self.request_cache.remove(sender)
-        self.logger.debug("[5] Sending AGREEMENT to %s", sender)
+        self.logger.info("Protect completed with %s", sender)
 
     @MessageHandler(msg.PROTECT_BLOCK_AGREEMENT)
     def protect_block_agreement(self, sender, body):
@@ -301,9 +347,9 @@ class ProtectSimpleAgent(BaseAgent):
 
         partner = next((a for a in self.agents if a.address == sender), None)
         self.request_interaction(partner)
-        self.request_cache.remove(sender)   
+        self.request_cache.remove(sender)
 
-        self.logger.debug("[6] Storing AGREEMENT from %s", sender)
+        self.logger.info("Protect completed with %s", sender)
 
     @MessageHandler(msg.PROTECT_REJECT)
     def protect_reject(self, sender, body):
@@ -311,7 +357,7 @@ class ProtectSimpleAgent(BaseAgent):
         receives a message does not agree with the conditions of the request. Multiple reasons lead
         to such an event. When received, an agent is supposed to remove the request from the request
         cache in order to allow for more requests with that agent in the future.
-        
+
         Arguments:
             sender {Address} -- Address of the sender of the request.
             body {msg.Empty} -- Empty message body.
@@ -320,6 +366,8 @@ class ProtectSimpleAgent(BaseAgent):
         if self.request_cache.get(sender) is None:
             self.logger.error('No open reqest found for this agent')
             return
+        
+        self.logger.debug("Interaction cancelled with %s", sender)
         self.request_cache.remove(sender)
 
     def step(self):
@@ -327,7 +375,8 @@ class ProtectSimpleAgent(BaseAgent):
         self.request_protect()
 
     def verify_chain(self, chain):
-        """Verifies the correctness of a chain received by another agent.
+        """Verifies the correctness of a chain received by another agent. First check is only if the
+        chain is complete. 
 
         Arguments:
             chain {[Block]} -- Agent's complete chain
@@ -339,6 +388,7 @@ class ProtectSimpleAgent(BaseAgent):
         seq = [block.sequence_number for block in chain]
         if not Counter(seq) == Counter(range(1, max(seq)+1)):
             return False
+
         return True
 
     def verify_blocks(self, block):
@@ -349,4 +399,64 @@ class ProtectSimpleAgent(BaseAgent):
         return True
 
     def verify_exchange(self, chain, exchange):
+        """Verfies whether the exchanges that an agent sends are matching the exchange blocks on his
+        chain.
+
+        Arguments:
+            chain {[Block]} -- [description]
+            exchange {{hash: Index}} -- [description]
+        """
+
+        # get exchange blocks on the chain
+        exchange_summary_blocks = [block for block in chain
+                                   if block.transaction.get('transfer_down') is not None]
+        
+        self.logger.debug("Chain: %s", chain)
+        self.logger.debug("Exchange: %s", exchange)
+
+        # check 1: exchange and exchange blocks have the same length
+        if not len(exchange_summary_blocks) <= len(exchange):
+            self.logger.error('\n'.join(['%s' % block for block in chain]))
+            self.logger.error('exchange: %s', exchange.exchanges)
+            self.logger.error("exchanges and exchange blocks are not the same length")
+            return False
+
+        # get the blocks that make up the exchanges
+        exchange_blocks = []
+        for block in exchange_summary_blocks:
+            if block.hash in exchange.exchanges:
+                if len(exchange.exchanges[block.hash]) == 0:
+                    self.logger.debug("Empty exchange")
+                    exchange_blocks.append([])
+                else:
+                    self.logger.debug(exchange.exchanges[block.hash].to_database_args())
+                    blocks = self.database.index(exchange.exchanges[block.hash])
+                    if len(blocks) == 0:
+                        self.logger.error('Blocks not found in database')
+                    exchange_blocks.append(self.database.index(exchange.exchanges[block.hash]))
+            else:
+                self.logger.error('Block is not mentioned in exchanges.')
+                return False
+
+        if not len(exchange_blocks) <= len(exchange):
+            self.logger.error("Exchange blocks don't match exchanges")
+            return False
+
+        # compare hashes
+        for block, blocks in zip(exchange_summary_blocks, exchange_blocks):
+            if block.link_sequence_number == UNKNOWN_SEQ:
+                if block.transaction['transfer_down'] != blocks_to_hash(blocks).encode('hex'):
+                    self.logger.error('\n'.join(['%s' % b for b in blocks]))
+                    self.logger.error('%s', block.transaction['transfer_down'])
+                    self.logger.error('%s', blocks_to_hash(blocks).encode('hex'))
+                    self.logger.error("wrong exchange hash")
+                    return False
+            else:
+                if block.transaction['transfer_up'] != blocks_to_hash(blocks).encode('hex'):
+                    self.logger.error('\n'.join(['%s' % block for block in blocks]))
+                    self.logger.error('%s', block.transaction['transfer_up'])
+                    self.logger.error('%s', blocks_to_hash(blocks).encode('hex'))
+                    self.logger.error("wrong exchange hash")
+                    return False
+
         return True
