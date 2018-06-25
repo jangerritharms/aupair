@@ -1,5 +1,6 @@
 import src.communication.messages_pb2 as msg
 from src.pyipv8.ipv8.attestation.trustchain.block import UNKNOWN_SEQ
+from src.public_key import PublicKey
 
 
 class BlockIndex(object):
@@ -158,3 +159,14 @@ class BlockIndex(object):
 
     def db_pack(self):
         return [(entry[0].encode('hex'), entry[1]) for entry in self.entries]
+
+    def __len__(self):
+        return len(self.entries)
+    
+    def __str__(self):
+        string = "BlockIndex {<"
+        string += ">, <".join(["%s:%s" % (PublicKey.from_bin(elem[0]).as_readable(), elem[1])
+                               for elem in self.entries])
+        string += ">}"
+
+        return string

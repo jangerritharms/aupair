@@ -21,7 +21,6 @@ class ExchangeStorage(object):
             block {Block} -- Exchange block
             index {BlockIndex} -- Index of the exchange.
         """
-
         self.exchanges[block.hash] = index
 
     def as_message(self):
@@ -38,3 +37,14 @@ class ExchangeStorage(object):
         """
 
         return cls({msg.block_hash: BlockIndex.from_message(msg.index) for msg in message.entries})
+
+    def __len__(self):
+        return len(self.exchanges)
+
+    def __str__(self):
+        string = "Exchange {\n\t"
+        string += "\n\t".join(["%s: %s" % (block_hash.encode('hex'), index)
+                               for block_hash, index in self.exchanges.iteritems()])
+        string += "\n}"
+
+        return string
