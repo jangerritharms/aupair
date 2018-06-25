@@ -77,6 +77,8 @@ class DiscoveryServer(MessageProcessor):
         agent = AgentInfo.from_message(msg.agent)
         self.agents.append(agent)
 
+        logging.debug("Address: %s -> Agent: %s", agent.address, agent.public_key.as_readable())
+
     @MessageHandler(msg.UNREGISTER)
     def unregister(self, sender, msg):
         """Unregisters and agent from the discovery server, bound to the UNREGISTER message.
