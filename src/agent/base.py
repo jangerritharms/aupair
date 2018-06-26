@@ -21,10 +21,9 @@ from src.chain.index import BlockIndex
 from src.agent.info import AgentInfo
 from src.communication.interface import CommunicationInterface
 from src.communication.messages import Message, MessageTypes, NewMessage
-from src.communication.messaging import MessageProcessor, MessageHandler
 
 
-class BaseAgent(MessageProcessor):
+class BaseAgent(object):
     """The BaseAgent class defines the default honest behavior for agents and includes all the
     attributes and functions to properly interact with the network, including the public and private
     keys, the communication interface and block creation tools. Also some default message handlers
@@ -44,10 +43,28 @@ class BaseAgent(MessageProcessor):
         self.public_key = PublicKey(self.private_key.pub())
 
         self.com = CommunicationInterface()
+        self._message_handlers = {}
         self.database = None
         self.block_factory = None
         self.serializer = Serializer()
         self.logger = None
+
+    def add_handler(self, message_type):
+        """Decorator that defines the decorated function as a handler for a certain
+        message type.
+
+        Example:
+
+            @agent.add_handler('hello')
+            def hello_handler():
+                [...]
+        """
+
+        def decorator(handler):
+            self._message_handlers[message_type] = handler
+            return handler
+
+        return decorator
 
     def setup(self, options, port):
         """Loads a configuration for the agent. The configuration includes the discovery server
@@ -101,55 +118,6 @@ class BaseAgent(MessageProcessor):
         self.com.send(self.options['discovery_server'],
                       NewMessage(msg.AGENT_REQUEST, msg.Empty()))
 
-    @MessageHandler(msg.AGENT_REPLY)
-    def set_agents(self, sender, body):
-        """Message handler for the AGENT_REPLY message which the agent receives in reply to the
-        AGENT_REQUEST message. Set the list of known agents to the list of AgentInfo objects
-        contained in the reply.
-
-        Arguments:
-            sender {string} -- Address string of the sender of the reply
-            body {msg.AgentReply} -- AgentReply message, containing a list of AgentInfo objects
-        """
-
-        self.agents = [AgentInfo.from_message(agent) for agent in body.agents]
-
-    @MessageHandler(msg.BLOCK_PROPOSAL)
-    def block_proposal(self, sender, body):
-        """Message handler for the BLOCK_PROPOSAL message which the agent receives from another
-        agent that wants to create a record of a transaction. This function stores the block
-        contained in the message and replies to the agent with an agreement block.
-
-        Arguments:
-            sender {string} -- Address string of the sender of the block proposal
-            body {msg.Block} -- Block message describing the block proposal
-        """
-
-        block = Block.from_message(body)
-        self.database.add(block)
-
-        new_block = self.block_factory.create_linked(block)
-        self.com.send(sender, NewMessage(msg.BLOCK_AGREEMENT, new_block.as_message()))
-
-        self.logger.debug("Block database: %s",
-                          BlockIndex.from_blocks(self.database.get_all_blocks()))
-
-    @MessageHandler(msg.BLOCK_AGREEMENT)
-    def block_confirm(self, sender, body):
-        """Message handler for the BLOCK_AGREEMENT message which the agent receives from another
-        agent in reply to a previous block proposal. This function simply stores that block.
-
-        Arguments:
-            sender {string} -- Address of the sender of the agreement block
-            body {msg.Block} -- Block message describing the agreement block
-        """
-
-        block = Block.from_message(body)
-
-        self.database.add(block)
-        self.logger.debug("Block database: %s",
-                          BlockIndex.from_blocks(self.database.get_all_blocks()))
-
     def register(self):
         """Sends a registration message to the discovery server with the agent's contact info. This
         announces to the network that the agent is available for interactions.
@@ -187,6 +155,24 @@ class BaseAgent(MessageProcessor):
                                     blocks=[block.as_message() for block in blocks])
             f.write(database.SerializeToString())
 
+    def handle(self, message, msg_wrapper=None):
+        """Selects a handler for the type of the received message. If no handler is
+        defined by the class for the given message type, the message will be ignored.
+
+        Arguments:
+            message {[type]} -- [description]
+        """
+        if type(message) == dict:
+            handler = self._message_handlers.get(message['type'], None)
+        else:
+            handler = self._message_handlers.get(msg_wrapper.type, None)
+
+        if handler is not None:
+            if type(message) == dict:
+                handler(self, message['sender'], message['payload'])
+            else:
+                handler(self, msg_wrapper.address, message)
+
     def on_shutdown(self):
         print('Shutting down')
         self.loop.stop()
@@ -195,6 +181,7 @@ class BaseAgent(MessageProcessor):
         """
         Starts the main loop of the agent.
         """
+        configure_base(self)
         self.com.start(self.handle)
 
         self.register()
@@ -209,3 +196,55 @@ class BaseAgent(MessageProcessor):
         self.loop.start()
 
         self.write_data()
+
+
+def configure_base(agent):
+
+    @agent.add_handler(msg.AGENT_REPLY)
+    def set_agents(self, sender, body):
+        """Message handler for the AGENT_REPLY message which the agent receives in reply to the
+        AGENT_REQUEST message. Set the list of known agents to the list of AgentInfo objects
+        contained in the reply.
+
+        Arguments:
+            sender {string} -- Address string of the sender of the reply
+            body {msg.AgentReply} -- AgentReply message, containing a list of AgentInfo objects
+        """
+
+        self.agents = [AgentInfo.from_message(agent) for agent in body.agents]
+
+    @agent.add_handler(msg.BLOCK_PROPOSAL)
+    def block_proposal(self, sender, body):
+        """Message handler for the BLOCK_PROPOSAL message which the agent receives from another
+        agent that wants to create a record of a transaction. This function stores the block
+        contained in the message and replies to the agent with an agreement block.
+
+        Arguments:
+            sender {string} -- Address string of the sender of the block proposal
+            body {msg.Block} -- Block message describing the block proposal
+        """
+
+        block = Block.from_message(body)
+        self.database.add(block)
+
+        new_block = self.block_factory.create_linked(block)
+        self.com.send(sender, NewMessage(msg.BLOCK_AGREEMENT, new_block.as_message()))
+
+        self.logger.debug("Block database: %s",
+                          BlockIndex.from_blocks(self.database.get_all_blocks()))
+
+    @agent.add_handler(msg.BLOCK_AGREEMENT)
+    def block_confirm(self, sender, body):
+        """Message handler for the BLOCK_AGREEMENT message which the agent receives from another
+        agent in reply to a previous block proposal. This function simply stores that block.
+
+        Arguments:
+            sender {string} -- Address of the sender of the agreement block
+            body {msg.Block} -- Block message describing the agreement block
+        """
+
+        block = Block.from_message(body)
+
+        self.database.add(block)
+        self.logger.debug("Block database: %s",
+                          BlockIndex.from_blocks(self.database.get_all_blocks()))

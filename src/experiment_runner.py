@@ -16,6 +16,14 @@ from src.discovery import DiscoveryServer, spawn_discovery_server
 
 from src.pyipv8.ipv8.attestation.trustchain.database import TrustChainDB
 
+AGENT_CLASSES = [
+    BaseAgent,
+    ProtectAgent,
+    ProtectSimpleAgent
+]
+
+AGENT_CLASS_TYPES = {agent_cls._type: agent_cls for agent_cls in AGENT_CLASSES}
+
 
 class ExperimentRunner(object):
     """
@@ -42,7 +50,7 @@ class ExperimentRunner(object):
         logging.basicConfig(format=FORMAT)
         db_logger = logging.getLogger("Database")
         db_logger.propagate = False
-        logging.disable(logging.INFO)
+        # logging.disable(logging.INFO)
         contents = config.read()
         self.options = json.loads(contents)
 
@@ -66,19 +74,19 @@ class ExperimentRunner(object):
 
         keys = [agent.info.public_key.as_readable() for agent in agents]
         honest_transactions = [agent.transactions_blocks() for agent in honest_agents]
-        dishonest_transactions = [agent.transactions_blocks() for agent in dishonest_agents]
-        print len(dishonest_transactions)
+        # dishonest_transactions = [agent.transactions_blocks() for agent in dishonest_agents]
+        # print len(dishonest_transactions)
 
         p1 = plt.bar(range(len(honest_agents)), honest_transactions, 0.35, color="#57a773")
-        p2 = plt.bar(range(len(honest_agents), len(honest_agents) + len(dishonest_agents)),
-                     dishonest_transactions, 0.35, color="#3f88c5")
+        # p2 = plt.bar(range(len(honest_agents), len(honest_agents) + len(dishonest_agents)),
+                    #  dishonest_transactions, 0.35, color="#3f88c5")
 
         plt.title('Database view')
         plt.xlabel('Agent by public key')
         plt.xlim([0, len(agents)])
         plt.xticks(range(len(agents)), keys, rotation="vertical")
         plt.ylabel('Number of transaction')
-        plt.legend((p1, p2), ("Honest agents", "Dishonest agents"))
+        plt.legend((p1,), ("Honest agents",))
         plt.tight_layout()
         plt.show()
 
@@ -112,21 +120,14 @@ class ExperimentRunner(object):
         discovery_process = Process(target=spawn_discovery_server, args=(discovery, ))
         discovery_process.start()
 
-        for _ in range(self.options['honest_nodes']):
-            agent = ProtectSimpleAgent()
-            next_port = self.options['node_port_range_begin'] + len(self.agent_processes)
-            agent.setup(self.options, next_port)
-            agent_process = Process(target=agent.run)
-            agent_process.start()
-            self.agent_processes.append(agent_process)
-
-        for _ in range(self.options['dishonest_nodes']):
-            agent = BadChainProtectAgent()
-            next_port = self.options['node_port_range_begin'] + len(self.agent_processes)
-            agent.setup(self.options, next_port)
-            agent_process = Process(target=agent.run)
-            agent_process.start()
-            self.agent_processes.append(agent_process)
+        for group in self.options['node_groups']:
+            for _ in range(group['count']):
+                agent = AGENT_CLASS_TYPES[group['type']]()
+                next_port = self.options['node_port_range_begin'] + len(self.agent_processes)
+                agent.setup(self.options, next_port)
+                agent_process = Process(target=agent.run)
+                agent_process.start()
+                self.agent_processes.append(agent_process)
 
         for process in self.agent_processes:
             process.join()
