@@ -320,6 +320,11 @@ class ProtectSimpleAgent(BaseAgent):
         block = Block.from_message(body)
         self.database.add(block)
 
+        index = BlockIndex.from_blocks([block])
+        payload = {'transfer_down': blocks_to_hash([block]).encode('hex')}
+        exchange_block = self.block_factory.create_new(self.get_info().public_key, payload)
+        self.exchange_storage.add_exchange(exchange_block, index)
+
         new_block = self.block_factory.create_linked(block)
         self.com.send(sender, NewMessage(msg.PROTECT_BLOCK_AGREEMENT, new_block.as_message()))
         self.exchange_storage.add_exchange(new_block,
@@ -347,6 +352,12 @@ class ProtectSimpleAgent(BaseAgent):
 
         block = Block.from_message(body)
         self.database.add(block)
+
+        block = Block.from_message(body)
+        index = BlockIndex.from_blocks([block])
+        payload = {'transfer_down': blocks_to_hash([block]).encode('hex')}
+        exchange_block = self.block_factory.create_new(self.get_info().public_key, payload)
+        self.exchange_storage.add_exchange(exchange_block, index)
 
         partner = next((a for a in self.agents if a.address == sender), None)
         self.request_interaction(partner)
