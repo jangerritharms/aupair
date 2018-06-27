@@ -33,12 +33,15 @@ class Agent:
 
     def transactions_blocks(self):
         blocks = [block for block in self.blocks
-                  if block.public_key == self.info.public_key.as_bin()
-                  and block.transaction.get('up')]
-        return len(blocks)
+                  if block.public_key == self.info.public_key.as_bin() and
+                  block.transaction.get('up')]
+        agreement = [block for tx in blocks for block in self.blocks
+                     if block.link_public_key == tx.public_key and
+                     block.link_sequence_number == tx.sequence_number]
+        return len(agreement)
 
     def exchange_blocks(self):
-        blocks = [block for block in self.blocks 
+        blocks = [block for block in self.blocks
                   if block.public_key == self.info.public_key.as_bin()
                   and block.transaction.get('transfer_down')]
         return len(blocks)

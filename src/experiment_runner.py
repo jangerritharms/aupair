@@ -4,6 +4,7 @@ Module defining the experiment runner class.
 import os
 import logging
 import json
+import numpy
 import matplotlib.pyplot as plt
 from multiprocessing import Process
 
@@ -61,32 +62,26 @@ class ExperimentRunner(object):
         files = os.listdir('data/')
         files = [f for f in files if f[-4:] == '.dat']
 
-        agents = []
-        honest_agents = []
-        dishonest_agents = []
+        agents = {}
         for db_file in files:
             agent = src.analysis.agent.Agent.from_file(os.path.join('data', db_file))
-            agents.append(agent)
-            if agent.info.type == "ProtectSimple":
-                honest_agents.append(agent)
-            elif agent.info.type == "BadChain":
-                dishonest_agents.append(agent)
+            agents.setdefault(agent.info.type, []).append(agent)
 
-        keys = [agent.info.public_key.as_readable() for agent in agents]
-        honest_transactions = [agent.transactions_blocks() for agent in honest_agents]
-        # dishonest_transactions = [agent.transactions_blocks() for agent in dishonest_agents]
-        # print len(dishonest_transactions)
+        keys = []
+        for typ, group in agents.iteritems():
+            start = len(keys)
+            keys.extend([agent.info.public_key.as_readable() for agent in group])
+            transactions = [agent.transactions_blocks() for agent in group]
 
-        p1 = plt.bar(range(len(honest_agents)), honest_transactions, 0.35, color="#57a773")
-        # p2 = plt.bar(range(len(honest_agents), len(honest_agents) + len(dishonest_agents)),
-                    #  dishonest_transactions, 0.35, color="#3f88c5")
+            plt.bar(range(start, len(keys)), transactions, 0.35, color=numpy.random.rand(3,1),
+                    label=typ)
 
         plt.title('Database view')
         plt.xlabel('Agent by public key')
-        plt.xlim([0, len(agents)])
-        plt.xticks(range(len(agents)), keys, rotation="vertical")
+        plt.xlim([0, len(keys)])
+        plt.xticks(range(len(keys)), keys, rotation="vertical")
         plt.ylabel('Number of transaction')
-        plt.legend((p1,), ("Honest agents",))
+        plt.legend()
         plt.tight_layout()
         plt.show()
 

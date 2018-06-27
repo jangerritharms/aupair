@@ -13,7 +13,7 @@ from src.communication.messaging import MessageHandler, MessageHandlerType
 from src.communication.messages import NewMessage
 from src.chain.index import BlockIndex
 from src.agent.exchange_storage import ExchangeStorage
-from src.agent.request_cache import RequestCache
+from src.agent.request_cache import RequestCache, RequestState
 
 
 def blocks_to_hash(blocks):
@@ -69,7 +69,7 @@ class ProtectSimpleAgent(BaseAgent):
 
         db = msg.Database(info=self.get_info().as_message(),
                           blocks=[block.as_message() for block in chain])
-        self.request_cache.new(partner.address)
+        self.request_cache.new(partner.address, RequestState.PROTECT_INIT)
         self.com.send(partner.address, NewMessage(msg.PROTECT_CHAIN, db))
 
         self.logger.info("Start interaction with %s", partner.address)
@@ -160,9 +160,10 @@ class ProtectSimpleAgent(BaseAgent):
 
         return True
 
-    def run(self):
+    def configure_message_handlers(self):
+        super(ProtectSimpleAgent, self).configure_message_handlers()
         configure_protect(self)
-        super(ProtectSimpleAgent, self).run()
+
 
 def configure_protect(agent):
 
@@ -193,7 +194,7 @@ def configure_protect(agent):
 
         chain = [Block.from_message(block) for block in body.blocks]
 
-        self.request_cache.new(sender, chain)
+        self.request_cache.new(sender, RequestState.PROTECT_INIT, chain)
         verification = self.verify_chain(chain)
 
         if verification:
@@ -221,6 +222,7 @@ def configure_protect(agent):
             return
 
         message = self.exchange_storage.as_message()
+        self.request_cache.get(sender).update_state(RequestState.PROTECT_INDEX)
         self.com.send(sender, NewMessage(msg.PROTECT_INDEX_REPLY, message))
 
     @agent.add_handler(msg.PROTECT_INDEX_REPLY)
@@ -257,6 +259,7 @@ def configure_protect(agent):
 
         self.request_cache.get(sender).index = partner_index
         self.request_cache.get(sender).exchanges = exchanges
+        self.request_cache.get(sender).update_state(RequestState.PROTECT_INDEX)
 
     @agent.add_handler(msg.PROTECT_BLOCKS_REQUEST)
     def protect_blocks_request(self, sender, body):
@@ -289,6 +292,7 @@ def configure_protect(agent):
         db = msg.Database(info=self.get_info().as_message(),
                           blocks=[block.as_message() for block in blocks])
         self.com.send(sender, NewMessage(msg.PROTECT_BLOCKS_REPLY, db))
+        self.request_cache.get(sender).update_state(RequestState.PROTECT_EXCHANGE)
 
 
     @agent.add_handler(msg.PROTECT_BLOCKS_REPLY)
@@ -342,6 +346,7 @@ def configure_protect(agent):
                                     blocks=[block.as_message() for block in sub_database],
                                     exchange=self.exchange_storage.as_message())
             self.com.send(sender, NewMessage(msg.PROTECT_CHAIN_BLOCKS, db))
+            self.request_cache.get(sender).update_state(RequestState.PROTECT_EXCHANGE)
 
             self.logger.info("Verification of %s's exchanges succeeded", sender)
         else:
@@ -385,6 +390,8 @@ def configure_protect(agent):
             self.com.send(partner.address, NewMessage(msg.PROTECT_BLOCK_PROPOSAL,
                                                       new_block.as_message()))
             self.exchange_storage.add_exchange(new_block, transfer_down)
+            self.request_cache.get(sender).update_state(RequestState.PROTECT_BLOCK)
+
 
             self.logger.info("Verification of %s's exchanges succeeded", sender)
 
@@ -421,8 +428,8 @@ def configure_protect(agent):
         self.com.send(sender, NewMessage(msg.PROTECT_BLOCK_AGREEMENT, new_block.as_message()))
         self.exchange_storage.add_exchange(new_block,
                                            self.request_cache.get(sender).transfer_up_index)
+        self.request_cache.get(sender).update_state(RequestState.PROTECT_DONE)
 
-        self.request_cache.remove(sender)
         self.logger.info("Protect completed with %s", sender)
 
     @agent.add_handler(msg.PROTECT_BLOCK_AGREEMENT)
@@ -453,27 +460,52 @@ def configure_protect(agent):
 
         partner = next((a for a in self.agents if a.address == sender), None)
         self.request_interaction(partner)
-        self.request_cache.remove(sender)
+        self.request_cache.get(sender).update_state(RequestState.PROTECT_DONE)
 
         self.logger.info("Protect completed with %s", sender)
 
     @agent.add_handler(msg.BLOCK_PROPOSAL)
     def block_proposal(self, sender, body):
+        self.logger.debug("%s", self.request_cache.get(sender))
+        if self.request_cache.get(sender) is None or \
+                not self.request_cache.get(sender).in_state(RequestState.PROTECT_DONE):
+            self.logger.error('No open reqest found for this agent')
+            return
+
         block = Block.from_message(body)
         index = BlockIndex.from_blocks([block])
         payload = {'transfer_down': blocks_to_hash([block]).encode('hex')}
         exchange_block = self.block_factory.create_new(self.get_info().public_key, payload)
         self.exchange_storage.add_exchange(exchange_block, index)
-        super(ProtectSimpleAgent, self).block_proposal(sender, body)
+
+        self.database.add(block)
+
+        new_block = self.block_factory.create_linked(block)
+        self.com.send(sender, NewMessage(msg.BLOCK_AGREEMENT, new_block.as_message()))
+
+        self.logger.debug("Block database: %s",
+                          BlockIndex.from_blocks(self.database.get_all_blocks()))
+
+        self.request_cache.remove(sender)
 
     @agent.add_handler(msg.BLOCK_AGREEMENT)
     def block_confirm(self, sender, body):
+        if self.request_cache.get(sender) is None or \
+                not self.request_cache.get(sender).in_state(RequestState.PROTECT_DONE):
+            self.logger.error('No open reqest found for this agent')
+            return
+
         block = Block.from_message(body)
         index = BlockIndex.from_blocks([block])
         payload = {'transfer_down': blocks_to_hash([block]).encode('hex')}
         exchange_block = self.block_factory.create_new(self.get_info().public_key, payload)
         self.exchange_storage.add_exchange(exchange_block, index)
-        super(ProtectSimpleAgent, self).block_confirm(sender, body)
+
+        self.database.add(block)
+        self.logger.debug("Block database: %s",
+                          BlockIndex.from_blocks(self.database.get_all_blocks()))
+
+        self.request_cache.remove(sender)
 
     @agent.add_handler(msg.PROTECT_REJECT)
     def protect_reject(self, sender, body):

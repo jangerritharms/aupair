@@ -177,11 +177,14 @@ class BaseAgent(object):
         print('Shutting down')
         self.loop.stop()
 
+    def configure_message_handlers(self):
+        configure_base(self)
+
     def run(self):
         """
         Starts the main loop of the agent.
         """
-        configure_base(self)
+        self.configure_message_handlers()
         self.com.start(self.handle)
 
         self.register()
