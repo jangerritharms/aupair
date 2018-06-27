@@ -36,8 +36,13 @@ class Agent:
                   if block.public_key == self.info.public_key.as_bin() and
                   block.transaction.get('up')]
         agreement = [block for tx in blocks for block in self.blocks
-                     if block.link_public_key == tx.public_key and
-                     block.link_sequence_number == tx.sequence_number]
+                     if (block.public_key == tx.link_public_key and
+                         block.sequence_number == tx.link_sequence_number) or
+                     (block.link_public_key == tx.public_key and
+                      block.link_sequence_number == tx.sequence_number)]
+
+        print len(blocks)
+        print len(agreement)
         return len(agreement)
 
     def exchange_blocks(self):
