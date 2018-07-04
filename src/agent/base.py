@@ -196,7 +196,7 @@ class BaseAgent(object):
         self.loop = ioloop.IOLoop.current()
         self.loop.call_later(self.options['duration'], self.unregister)
         self.loop.call_later(self.options['startup_time'], self.request_agents)
-        cb_step = ioloop.PeriodicCallback(self.step, 10)
+        cb_step = ioloop.PeriodicCallback(self.step, 50)
         self.loop.call_later(self.options['startup_time'] + 5, cb_step.start)
         signal.signal(signal.SIGINT,
                       lambda sig, frame: self.loop.add_callback_from_signal(self.on_shutdown))
