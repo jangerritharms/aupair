@@ -1,14 +1,18 @@
 {
   "node_groups": [
     {
-      "type": "ProtectSimple",
+      "type": "Honest agent",
       "count": 3
+    },
+    {
+      "type": "Dissemination free-rider",
+      "count": 2
     }
   ],
   "honest_nodes": 3,
   "dishonest_nodes": 0,
   "discovery_port": 8000,
   "node_port_range_begin": 10000,
-  "emulation_duration": 20,
+  "emulation_duration": 100,
   "startup_time": 1
 }

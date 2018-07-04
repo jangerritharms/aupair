@@ -88,3 +88,29 @@ class Block(TrustChainBlock):
 
         obj.__class__ = Block
         return obj
+
+    def is_transaction(self):
+        """Looks at the data stored in the transaction field and determines whether the block is a
+        transaction or not. For this usecase transactions contain the "up" and "down" field.
+        """
+        return self.transaction.get('up') is not None and self.transaction.get('down') is not None
+
+    def is_double_exchange(self):
+        """Looks at the data stored in the transaction field and determines whether the block is a
+        transaction or not. For this usecase transactions contain the "up" and "down" field.
+        """
+        return self.transaction.get('transfer_down') is not None and \
+            self.transaction.get('transfer_up') is not None
+
+    def is_single_exchange(self):
+        """Looks at the data stored in the transaction field and determines whether the block is a
+        transaction or not. For this usecase transactions contain the "up" and "down" field.
+        """
+        return self.transaction.get('transfer_down') is not None and \
+            self.transaction.get('transfer_up') is None
+
+    def is_exchange(self):
+        """Looks at the data stored in the transaction field and determines whether the block is an
+        exchange or not. For this usecase exchanges contain the "transfer_down" field.
+        """
+        return self.transaction.get('transfer_down')

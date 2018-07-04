@@ -41,8 +41,6 @@ class Agent:
                      (block.link_public_key == tx.public_key and
                       block.link_sequence_number == tx.sequence_number)]
 
-        print len(blocks)
-        print len(agreement)
         return len(agreement)
 
     def exchange_blocks(self):

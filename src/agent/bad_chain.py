@@ -5,6 +5,7 @@ import src.communication.messages_pb2 as msg
 
 from src.agent.simple_protect import ProtectSimpleAgent
 from src.communication.messages import NewMessage
+from src.agent.request_cache import RequestState
 
 
 class BadChainProtectAgent(ProtectSimpleAgent):
@@ -16,11 +17,11 @@ class BadChainProtectAgent(ProtectSimpleAgent):
             partner = random.choice(self.agents)
 
         if self.request_cache.get(partner.address) is not None:
-            logging.error('here Request already open, ignoring')
+            self.logger.warning('Request already open, ignoring request with %s', partner.address)
             return
         if partner.address in self.ignore_list:
             return
-        
+
         chain = self.database.get_chain(self.public_key)
 
         # manipulate the chain by removing an item
@@ -28,6 +29,7 @@ class BadChainProtectAgent(ProtectSimpleAgent):
 
         db = msg.Database(info=self.get_info().as_message(),
                           blocks=[block.as_message() for block in chain])
-        self.request_cache.new(partner.address)
+        self.request_cache.new(partner.address, RequestState.PROTECT_INIT)
         self.com.send(partner.address, NewMessage(msg.PROTECT_CHAIN, db))
-        self.logger.debug("[0] Requesting PROTECT with %s", partner.address)
+
+        self.logger.info("Start interaction with %s", partner.address)

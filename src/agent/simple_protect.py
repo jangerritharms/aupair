@@ -1,5 +1,6 @@
 import random
 import logging
+import copy
 from collections import Counter
 from hashlib import sha256
 
@@ -37,7 +38,7 @@ class ProtectSimpleAgent(BaseAgent):
     This happens with the RequestStorage.
     """
 
-    _type = "ProtectSimple"
+    _type = "Honest agent"
 
     def __init__(self, *args, **kwargs):
         super(ProtectSimpleAgent, self).__init__(*args, **kwargs)
@@ -76,7 +77,8 @@ class ProtectSimpleAgent(BaseAgent):
 
     def step(self):
 
-        self.request_protect()
+        if random.choice(self.choices):
+            self.request_protect()
 
     def verify_chain(self, chain):
         """Verifies the correctness of a chain received by another agent. First check is only if the
@@ -89,9 +91,24 @@ class ProtectSimpleAgent(BaseAgent):
             bool -- Outcome of the verification, True means correct, False means fraud
         """
 
+        # check missing blocks
         seq = [block.sequence_number for block in chain]
         if not Counter(seq) == Counter(range(1, max(seq)+1)):
             return False
+
+        # check for enough exchanges: with protect each transaction should have an exchange before
+        transactions = [block for block in chain if block.transaction.get('up') is not None]
+        exchanges = [block for block in chain if block.transaction.get('transfer_down')]
+        for tx in transactions:
+            exchange = next((block for block in exchanges
+                            if block.public_key == tx.public_key and
+                            block.link_public_key == tx.link_public_key and
+                            block.sequence_number < tx.sequence_number), None)
+
+            if exchange is None:
+                return False
+
+            exchanges.remove(exchange)
 
         return True
 
@@ -145,18 +162,39 @@ class ProtectSimpleAgent(BaseAgent):
         for block, blocks in zip(exchange_summary_blocks, exchange_blocks):
             if block.link_sequence_number == UNKNOWN_SEQ:
                 if block.transaction['transfer_down'] != blocks_to_hash(blocks).encode('hex'):
-                    self.logger.error('\n'.join(['%s' % b for b in blocks]))
-                    self.logger.error('%s', block.transaction['transfer_down'])
-                    self.logger.error('%s', blocks_to_hash(blocks).encode('hex'))
                     self.logger.error("wrong exchange hash")
                     return False
             else:
                 if block.transaction['transfer_up'] != blocks_to_hash(blocks).encode('hex'):
-                    self.logger.error('\n'.join(['%s' % block for block in blocks]))
-                    self.logger.error('%s', block.transaction['transfer_up'])
-                    self.logger.error('%s', blocks_to_hash(blocks).encode('hex'))
                     self.logger.error("wrong exchange hash")
                     return False
+
+        return True
+
+    def replay_verification(self, chain, exchanges):
+        
+        transactions = [block for block in chain if block.is_transaction()]
+
+        last_index = 0
+        database = []
+        for tx in transactions:
+            self.logger.debug("Transaction: %s", tx)
+            for block in chain[last_index:tx.sequence_number-1]:
+                if block.is_exchange():
+                    exchange = self.database.index(exchanges.exchanges[block.hash])
+                    database.extend(exchange)
+                database.append(block)
+
+            # get the chain of transaction party
+            self.logger.debug("Database: [%s]", ",".join("%s" % block for block in database))
+            chain = [block for block in database if block.public_key == tx.link_public_key]
+            
+            self.logger.debug("Chain: [%s]", ",".join("%s" % block for block in chain))
+            verification = self.verify_chain(chain)
+            if not verification:
+                return False
+
+            last_index = tx.sequence_number - 1
 
         return True
 
@@ -202,6 +240,7 @@ def configure_protect(agent):
             self.com.send(sender, NewMessage(msg.PROTECT_INDEX_REQUEST, msg.Empty()))
         else:
             self.ignore_list.append(sender)
+            self.request_cache.remove(sender)
             self.com.send(sender, NewMessage(msg.PROTECT_REJECT, msg.Empty()))
 
     @agent.add_handler(msg.PROTECT_INDEX_REQUEST)
@@ -247,14 +286,11 @@ def configure_protect(agent):
         for block_hash, index in exchanges.exchanges.iteritems():
             partner_index = partner_index + index
         partner_index += BlockIndex.from_blocks(self.request_cache.get(sender).chain)
-        self.logger.debug("Calculated partner index: %s", partner_index)
 
         own_index = BlockIndex.from_blocks(self.database.get_all_blocks())
-        self.logger.debug("Calculated own_index: %s", own_index)
 
         db = (partner_index - own_index).as_message()
 
-        self.logger.debug("Requesting blocks: %s", (partner_index - own_index))
         self.com.send(sender, NewMessage(msg.PROTECT_BLOCKS_REQUEST, db))
 
         self.request_cache.get(sender).index = partner_index
@@ -315,8 +351,7 @@ def configure_protect(agent):
             return
 
         blocks = [Block.from_message(block) for block in body.blocks]
-        
-        self.logger.debug("Blocks received: %s", BlockIndex.from_blocks(blocks))
+
         self.database.add_blocks(blocks)
         self.request_cache.get(sender).transfer_up = blocks_to_hash(blocks)
         self.request_cache.get(sender).transfer_up_index = BlockIndex.from_blocks(blocks)
@@ -324,13 +359,13 @@ def configure_protect(agent):
         verification = self.verify_exchange(self.request_cache.get(sender).chain,
                                             self.request_cache.get(sender).exchanges)
 
+        # verification = verification and self.replay_verification(self.request_cache.get(sender).chain,
+        #                                                          self.request_cache.get(sender).exchanges)
         if verification:
             own_chain = self.database.get_chain(self.public_key)
             own_index = BlockIndex.from_blocks(self.database.get_all_blocks())
             partner_index = self.request_cache.get(sender).index
-            self.logger.debug("Calculated partner index: %s", partner_index)
             index = (own_index - partner_index)
-            self.logger.debug("Calculated own_index: %s", own_index)
 
             sub_database = []
             if len(index) == 0:
@@ -341,7 +376,6 @@ def configure_protect(agent):
                 self.request_cache.get(sender).transfer_down = blocks_to_hash(blocks)
                 self.request_cache.get(sender).transfer_down_index = index
 
-            self.logger.debug("Sending blocks: %s", index)
             db = msg.ChainAndBlocks(chain=[block.as_message() for block in own_chain],
                                     blocks=[block.as_message() for block in sub_database],
                                     exchange=self.exchange_storage.as_message())
@@ -350,6 +384,8 @@ def configure_protect(agent):
 
             self.logger.info("Verification of %s's exchanges succeeded", sender)
         else:
+            self.logger.error("Verification of %s's exchanges failed", sender)
+            self.request_cache.remove(sender)
             self.ignore_list.append(sender)
             self.com.send(sender, NewMessage(msg.PROTECT_REJECT, msg.Empty()))
 
@@ -379,7 +415,8 @@ def configure_protect(agent):
         self.database.add_blocks(blocks)
         self.request_cache.get(sender).transfer_down = blocks_to_hash(blocks)
 
-        verification = self.verify_exchange(chain, exchanges)
+        verification = self.verify_chain(chain) and self.verify_exchange(chain, exchanges) # and \
+                        # self.replay_verification(chain, exchanges)
         transfer_down = BlockIndex.from_blocks(blocks)
 
         if verification:
@@ -396,6 +433,8 @@ def configure_protect(agent):
             self.logger.info("Verification of %s's exchanges succeeded", sender)
 
         else:
+            self.logger.info("Verification of %s's exchanges failed", sender)
+            self.request_cache.remove(sender)
             self.ignore_list.append(sender)
             self.com.send(sender, NewMessage(msg.PROTECT_REJECT, msg.Empty()))
 
@@ -466,7 +505,6 @@ def configure_protect(agent):
 
     @agent.add_handler(msg.BLOCK_PROPOSAL)
     def block_proposal(self, sender, body):
-        self.logger.debug("%s", self.request_cache.get(sender))
         if self.request_cache.get(sender) is None or \
                 not self.request_cache.get(sender).in_state(RequestState.PROTECT_DONE):
             self.logger.error('No open reqest found for this agent')

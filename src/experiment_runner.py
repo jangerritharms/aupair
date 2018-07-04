@@ -12,6 +12,7 @@ import src.analysis.agent
 from src.agent.base import BaseAgent
 from src.agent.protect import ProtectAgent
 from src.agent.simple_protect import ProtectSimpleAgent
+from src.agent.no_verification import NoVerificationAgent
 from src.agent.bad_chain import BadChainProtectAgent
 from src.discovery import DiscoveryServer, spawn_discovery_server
 
@@ -19,11 +20,15 @@ from src.pyipv8.ipv8.attestation.trustchain.database import TrustChainDB
 
 AGENT_CLASSES = [
     BaseAgent,
-    ProtectAgent,
-    ProtectSimpleAgent
+    # ProtectAgent,
+    ProtectSimpleAgent,
+    BadChainProtectAgent,
+    NoVerificationAgent
 ]
 
 AGENT_CLASS_TYPES = {agent_cls._type: agent_cls for agent_cls in AGENT_CLASSES}
+AGENT_TYPE_LIST = [agent_cls._type for agent_cls in AGENT_CLASSES]
+AGENT_CLASS_COLOR = ["#f25f5c", "#4aad52"]
 
 
 class ExperimentRunner(object):
@@ -72,9 +77,10 @@ class ExperimentRunner(object):
             start = len(keys)
             keys.extend([agent.info.public_key.as_readable() for agent in group])
             transactions = [agent.transactions_blocks() for agent in group]
-
-            plt.bar(range(start, len(keys)), transactions, 0.35, color=numpy.random.rand(3,1),
-                    label=typ)
+            print typ
+            print AGENT_CLASS_TYPES.keys().index(typ)
+            plt.bar(range(start, len(keys)), transactions, 0.35,
+                    label=typ, color=AGENT_CLASS_COLOR[AGENT_TYPE_LIST.index(typ)])
 
         plt.title('Database view')
         plt.xlabel('Agent by public key')

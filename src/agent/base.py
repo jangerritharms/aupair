@@ -30,7 +30,7 @@ class BaseAgent(object):
     for replying to blocks, registering and unregistering are included.
     """
 
-    _type = "Base"
+    _type = "Dissemination free-rider"
 
     def __init__(self):
         """Creates a new BaseAgent, creates keys and declares class attributes.
@@ -48,6 +48,9 @@ class BaseAgent(object):
         self.block_factory = None
         self.serializer = Serializer()
         self.logger = None
+
+        self.choices = [False]*99
+        self.choices.append(True)
 
     def add_handler(self, message_type):
         """Decorator that defines the decorated function as a handler for a certain
@@ -141,7 +144,8 @@ class BaseAgent(object):
         the agent decides according to some strategy whether to perform an action or not.
         """
 
-        self.request_interaction()
+        if random.choice(self.choices):
+            self.request_interaction()
 
     def write_data(self):
         """Serializes the state(database) of the agent in order to be analyzed afterwards. The files
@@ -192,7 +196,7 @@ class BaseAgent(object):
         self.loop = ioloop.IOLoop.current()
         self.loop.call_later(self.options['duration'], self.unregister)
         self.loop.call_later(self.options['startup_time'], self.request_agents)
-        cb_step = ioloop.PeriodicCallback(self.step, 1000)
+        cb_step = ioloop.PeriodicCallback(self.step, 10)
         self.loop.call_later(self.options['startup_time'] + 5, cb_step.start)
         signal.signal(signal.SIGINT,
                       lambda sig, frame: self.loop.add_callback_from_signal(self.on_shutdown))
