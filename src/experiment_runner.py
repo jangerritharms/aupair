@@ -13,6 +13,7 @@ from src.agent.base import BaseAgent
 from src.agent.protect import ProtectAgent
 from src.agent.simple_protect import ProtectSimpleAgent
 from src.agent.no_verification import NoVerificationAgent
+from src.agent.double_spend import DoubleSpendAgent
 from src.agent.bad_chain import BadChainProtectAgent
 from src.discovery import DiscoveryServer, spawn_discovery_server
 
@@ -23,12 +24,13 @@ AGENT_CLASSES = [
     # ProtectAgent,
     ProtectSimpleAgent,
     BadChainProtectAgent,
-    NoVerificationAgent
+    NoVerificationAgent,
+    DoubleSpendAgent
 ]
 
 AGENT_CLASS_TYPES = {agent_cls._type: agent_cls for agent_cls in AGENT_CLASSES}
 AGENT_TYPE_LIST = [agent_cls._type for agent_cls in AGENT_CLASSES]
-AGENT_CLASS_COLOR = ["#f25f5c", "#4aad52"]
+AGENT_CLASS_COLOR = ["#f25f5c", "#4aad52", "#f25f5c", "#f25f5c", "#f25f5c"]
 
 
 class ExperimentRunner(object):

@@ -23,7 +23,7 @@ class Database(TrustChainDB):
         trust_chain_blocks = super(Database, self)._getall(*args, **kwargs)
         return [Block.convert_to_Block(block) for block in trust_chain_blocks]
 
-    def add(self, block, check_double_spend=False):
+    def add(self, block, check_double_spend=True):
         """
         Adds a block to the database.
         """
@@ -33,9 +33,12 @@ class Database(TrustChainDB):
             logging.warning('Error adding block %s', block)
 
             if check_double_spend:
-                existing = self.database.get(block.public_key, block.sequence_number)
+                existing = self.get(block.public_key, block.sequence_number)
                 if existing.hash != block.hash:
                     logging.warning('DOUBLE SPENDING DETECTED')
+                    return existing
+                logging.warning("NO DOUBLE SPEND DETECTED")
+        return False
 
     def add_blocks(self, blocks):
         """Addes multiple blocks to the database.
@@ -45,7 +48,11 @@ class Database(TrustChainDB):
         """
 
         for block in blocks:
-            self.add(block)
+            result = self.add(block)
+            if result != False:
+                return result
+
+        return False
 
     def get_chain(self, key):
         """Retrives the chain (all blocks authored) of the agent with the given
@@ -72,12 +79,12 @@ class Database(TrustChainDB):
             sequence_length {int} -- Number of blocks to remove (default: {-1})
         """
 
-        self.database.execute(
-                        'DELETE FROM blocks WHERE public_key = ? AND sequence_number >= ? ' +
-                        'AND sequence_number < ?',
-                        (key.as_buffer(),
-                         sequence_begin,
-                         sequence_begin + sequence_length))
+        self.execute(
+                    'DELETE FROM blocks WHERE public_key = ? AND sequence_number >= ? ' +
+                    'AND sequence_number < ?',
+                    (key.as_buffer(),
+                        sequence_begin,
+                        sequence_begin + sequence_length))
 
     def get_all_blocks(self):
         return self._getall('', ())

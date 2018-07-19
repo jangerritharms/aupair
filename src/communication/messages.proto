@@ -16,6 +16,8 @@ enum Type {
     PROTECT_REJECT = 13;
     PROTECT_INDEX_REQUEST = 14;
     PROTECT_INDEX_REPLY = 15;
+    PROTECT_EXCHANGE_REQUEST = 16;
+    PROTECT_EXCHANGE_REPLY = 17;
 }
 
 message Empty {}
@@ -52,6 +54,7 @@ message WrapperMessage{
         BlockIndex index = 16;
         ChainAndBlocks chain_index = 17;
         ExchangeIndex ex_index = 18;
+        ExchangeRequest ex_hash = 19;
     }
 }
 
@@ -93,4 +96,8 @@ message ChainAndBlocks {
     repeated Block chain = 1;
     repeated Block blocks = 2;
     required ExchangeIndex exchange = 3;
+}
+
+message ExchangeRequest {
+    required bytes exchange_hash = 1;
 }

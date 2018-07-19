@@ -10,6 +10,7 @@ import src.communication.messages_pb2 as msg
 
 from src.agent.base import BaseAgent
 from src.chain.block import Block
+from src.public_key import PublicKey
 from src.communication.messaging import MessageHandler, MessageHandlerType
 from src.communication.messages import NewMessage
 from src.chain.index import BlockIndex
@@ -96,6 +97,12 @@ class ProtectSimpleAgent(BaseAgent):
         if not Counter(seq) == Counter(range(1, max(seq)+1)):
             return False
 
+        max_seq = self.database.get_latest(chain[0].public_key)
+        if max_seq and seq[-1] < max_seq.sequence_number:
+            self.logger.error("Double spending detected for agent %s",
+                              PublicKey.from_bin(chain[0].public_key).as_readable())
+            return False
+
         # check for enough exchanges: with protect each transaction should have an exchange before
         transactions = [block for block in chain if block.transaction.get('up') is not None]
         exchanges = [block for block in chain if block.transaction.get('transfer_down')]
@@ -110,13 +117,6 @@ class ProtectSimpleAgent(BaseAgent):
 
             exchanges.remove(exchange)
 
-        return True
-
-    def verify_blocks(self, block):
-
-        return True
-
-    def verify_chain_and_blocks(self, blocks):
         return True
 
     def verify_exchange(self, chain, exchange):
@@ -162,12 +162,18 @@ class ProtectSimpleAgent(BaseAgent):
         for block, blocks in zip(exchange_summary_blocks, exchange_blocks):
             if block.link_sequence_number == UNKNOWN_SEQ:
                 if block.transaction['transfer_down'] != blocks_to_hash(blocks).encode('hex'):
+                    partner = next((a for a in self.agents if a.public_key == PublicKey.from_bin(chain[0].public_key)), None)
+
+                    self.com.send(partner.address, NewMessage(msg.PROTECT_EXCHANGE_REQUEST,
+                                                      msg.ExchangeRequest(exchange_hash=block.hash)))
                     self.logger.error("wrong exchange hash")
-                    return False
             else:
                 if block.transaction['transfer_up'] != blocks_to_hash(blocks).encode('hex'):
+                    partner = next((a for a in self.agents if a.public_key == PublicKey.from_bin(chain[0].public_key)), None)
+
+                    self.com.send(partner.address, NewMessage(msg.PROTECT_EXCHANGE_REQUEST,
+                                                      msg.ExchangeRequest(exchange_hash=block.hash)))
                     self.logger.error("wrong exchange hash")
-                    return False
 
         return True
 
@@ -544,6 +550,36 @@ def configure_protect(agent):
                           BlockIndex.from_blocks(self.database.get_all_blocks()))
 
         self.request_cache.remove(sender)
+
+    @agent.add_handler(msg.PROTECT_EXCHANGE_REQUEST)
+    def exchange_request(self, sender, body):
+        if self.request_cache.get(sender) is None:
+            self.logger.error('No open reqest found for this agent')
+            return
+
+        ex_hash = body.exchange_hash
+        exchange_index = self.exchange_storage.exchanges[ex_hash]
+        blocks = self.database.index(exchange_index)
+
+        self.com.send(sender, NewMessage(msg.PROTECT_EXCHANGE_REPLY,
+                                         msg.Database(info=self.get_info().as_message(),
+                                                      blocks=[block.as_message() for block in blocks])))
+
+    @agent.add_handler(msg.PROTECT_EXCHANGE_REPLY)
+    def exchange_reply(self, sender, body):
+        if self.request_cache.get(sender) is None:
+            self.logger.error('No open reqest found for this agent')
+            return
+
+        self.logger.error("Trying to detect the actual double spend")
+        blocks = [Block.from_message(block) for block in body.blocks]
+        
+        result = self.database.add_blocks(blocks)
+
+        if result:
+            partner = next((a for a in self.agents if a.public_key == PublicKey.from_bin(result.public_key)), None)
+            self.ignore_list.append(partner.address)
+            self.logger.info("Will ignore %s because of double spend", partner.public_key.as_readable())
 
     @agent.add_handler(msg.PROTECT_REJECT)
     def protect_reject(self, sender, body):

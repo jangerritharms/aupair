@@ -2,15 +2,13 @@
   "node_groups": [
     {
       "type": "Honest agent",
-      "count": 3
+      "count": 6
     },
     {
-      "type": "Dissemination free-rider",
-      "count": 2
+      "type": "Double spender",
+      "count": 1
     }
   ],
-  "honest_nodes": 3,
-  "dishonest_nodes": 0,
   "discovery_port": 8000,
   "node_port_range_begin": 10000,
   "emulation_duration": 100,

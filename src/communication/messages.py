@@ -72,7 +72,9 @@ type_to_attribute = {
     msg.PROTECT_BLOCK_AGREEMENT: "block",
     msg.PROTECT_REJECT: "empty",
     msg.PROTECT_INDEX_REQUEST: "empty",
-    msg.PROTECT_INDEX_REPLY: "ex_index"
+    msg.PROTECT_INDEX_REPLY: "ex_index",
+    msg.PROTECT_EXCHANGE_REQUEST: "ex_hash",
+    msg.PROTECT_EXCHANGE_REPLY: "db"
 }
 
 

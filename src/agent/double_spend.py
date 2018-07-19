@@ -8,9 +8,9 @@ from src.communication.messages import NewMessage
 from src.agent.request_cache import RequestState
 
 
-class BadChainProtectAgent(ProtectSimpleAgent):
+class DoubleSpendAgent(ProtectSimpleAgent):
 
-    _type = "Incomplete chain"
+    _type = "Double spender"
 
     def request_protect(self, partner=None):
         while partner is None or partner == self.get_info():
@@ -26,7 +26,10 @@ class BadChainProtectAgent(ProtectSimpleAgent):
 
         # manipulate the chain by removing an item
         if len(chain) > 2:
-            chain.pop(random.randrange(len(chain)))
+            if random.choice([False, False, False, False, True]):
+                self.database.delete(self.public_key, len(chain)-1, 2)
+
+        chain = self.database.get_chain(self.public_key)
 
         db = msg.Database(info=self.get_info().as_message(),
                           blocks=[block.as_message() for block in chain])
