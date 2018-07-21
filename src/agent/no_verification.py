@@ -19,7 +19,7 @@ class NoVerificationAgent(ProtectSimpleAgent):
     def verify_exchange(self, chain, exchange):
         return True
 
-    def verify_chain(self, chain):
+    def verify_chain(self, chain, expected_lenth):
         return True
 
 
@@ -36,6 +36,8 @@ def configure_noverification(agent):
         self.database.add(block)
         self.logger.debug("Block database: %s",
                           BlockIndex.from_blocks(self.database.get_all_blocks()))
+
+        self.logger.info("Exchange and transaction with %s completed", sender)
 
         self.request_cache.remove(sender)
 

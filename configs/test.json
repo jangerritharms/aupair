@@ -1,16 +1,20 @@
 {
   "node_groups": [
     {
-      "type": "Honest agent",
-      "count": 6
+      "type": "Replay verifier",
+      "count": 3
     },
     {
-      "type": "Double spender",
+      "type": "Validation free-rider",
+      "count": 1
+    },
+    {
+      "type": "Incomplete chain",
       "count": 1
     }
   ],
   "discovery_port": 8000,
   "node_port_range_begin": 10000,
-  "emulation_duration": 100,
+  "emulation_duration": 200,
   "startup_time": 1
 }

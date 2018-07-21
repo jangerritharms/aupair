@@ -15,6 +15,7 @@ from src.agent.simple_protect import ProtectSimpleAgent
 from src.agent.no_verification import NoVerificationAgent
 from src.agent.double_spend import DoubleSpendAgent
 from src.agent.bad_chain import BadChainProtectAgent
+from src.agent.advanced_protect import ProtectAdvancedAgent
 from src.discovery import DiscoveryServer, spawn_discovery_server
 
 from src.pyipv8.ipv8.attestation.trustchain.database import TrustChainDB
@@ -25,12 +26,13 @@ AGENT_CLASSES = [
     ProtectSimpleAgent,
     BadChainProtectAgent,
     NoVerificationAgent,
-    DoubleSpendAgent
+    DoubleSpendAgent,
+    ProtectAdvancedAgent
 ]
 
 AGENT_CLASS_TYPES = {agent_cls._type: agent_cls for agent_cls in AGENT_CLASSES}
 AGENT_TYPE_LIST = [agent_cls._type for agent_cls in AGENT_CLASSES]
-AGENT_CLASS_COLOR = ["#f25f5c", "#4aad52", "#f25f5c", "#f25f5c", "#f25f5c"]
+AGENT_CLASS_COLOR = ["#f25f5c", "#4aad52", "#f25f5c", "#e86252", "#f25f5c", "#4aad52"]
 
 
 class ExperimentRunner(object):
@@ -89,7 +91,7 @@ class ExperimentRunner(object):
         plt.xlim([0, len(keys)])
         plt.xticks(range(len(keys)), keys, rotation="vertical")
         plt.ylabel('Number of transaction')
-        plt.legend()
+        plt.legend(loc="upper left")
         plt.tight_layout()
         plt.show()
 

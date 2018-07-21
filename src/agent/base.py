@@ -154,6 +154,8 @@ class BaseAgent(object):
         """
 
         blocks = self.database._getall('', ())
+        if hasattr(self, "ignore_list"):
+            self.logger.info("Ignore list: [%s]", ",".join((a for a in set(self.ignore_list))))
         with open(os.path.join('data', self.public_key.as_readable() + '.dat'), 'wb') as f:
             database = msg.Database(info=self.get_info().as_message(),
                                     blocks=[block.as_message() for block in blocks])

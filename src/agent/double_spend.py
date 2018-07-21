@@ -27,6 +27,11 @@ class DoubleSpendAgent(ProtectSimpleAgent):
         # manipulate the chain by removing an item
         if len(chain) > 2:
             if random.choice([False, False, False, False, True]):
+                block1 = self.database.get(self.public_key.as_buffer(), len(chain)-1)
+                block2 = self.database.get(self.public_key.as_buffer(), len(chain))
+                self.logger.error("DOULBE SPENDING BABYYYYYYYYYYYYYYYYYYYYYYYYYYYYY")
+                self.logger.error("Block 1 removed: %s", block1)
+                self.logger.error("Block 2 removed: %s", block2)
                 self.database.delete(self.public_key, len(chain)-1, 2)
 
         chain = self.database.get_chain(self.public_key)

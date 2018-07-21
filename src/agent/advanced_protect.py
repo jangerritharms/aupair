@@ -1,0 +1,243 @@
+import random
+import logging
+from hashlib import sha256
+from collections import Counter
+
+import src.communication.messages_pb2 as msg
+
+from src.agent.simple_protect import ProtectSimpleAgent
+from src.communication.messages import NewMessage
+from src.agent.request_cache import RequestState
+from src.chain.block import Block, UNKNOWN_SEQ
+from src.chain.index import BlockIndex
+from src.agent.exchange_storage import ExchangeStorage
+from src.agent.request_cache import RequestCache, RequestState
+
+
+def blocks_to_hash(blocks):
+    """Takes a list of blocks and creates a hash that includes the hashes of all blocks contained.
+
+    Arguments:
+        blocks {[Block]} -- List of blocks.
+    """
+
+    list_of_hashes = sorted([block.hash for block in blocks])
+    hash_string = ''.join(list_of_hashes)
+    if hash_string == '':
+        return ''
+    return sha256(hash_string).digest()
+
+def verify_chain(chain, expected_length):
+    """Verifies the correctness of a chain received by another agent. First check is only if the
+    chain is complete. 
+
+    Arguments:
+        chain {[Block]} -- Agent's complete chain
+
+    Returns:
+        bool -- Outcome of the verification, True means correct, False means fraud
+    """
+
+    # check missing blocks
+    seq = list(set([block.sequence_number for block in chain]))
+    if not Counter(seq[:expected_length]) == Counter(range(1, expected_length+1)):
+        logging.error("Chain does not have the correct sequence, expected 1 to %d", expected_length)
+        logging.error("%s", seq)
+        return False
+
+    # # check for enough exchanges: with protect each transaction should have an exchange before
+    # transactions = [block for block in chain if block.transaction.get('up') is not None]
+    # exchanges = [block for block in chain if block.transaction.get('transfer_down')]
+    # for tx in transactions:
+    #     exchange = next((block for block in exchanges
+    #                     if block.public_key == tx.public_key and
+    #                     block.link_public_key == tx.link_public_key and
+    #                     block.sequence_number < tx.sequence_number), None)
+
+    #     if exchange is None:
+    #         self.logger.error("Not enough exchange blocks found")
+    #         self.logger.error("Chain [%s]", ",".join(("%s" % block for block in chain)))
+    #         return False
+
+    #     exchanges.remove(exchange)
+
+    return True
+
+
+class ProtectAdvancedAgent(ProtectSimpleAgent):
+
+    _type = "Replay verifier"
+
+    def configure_message_handlers(self):
+        super(ProtectAdvancedAgent, self).configure_message_handlers()
+        configure_advanced(self)
+
+    def replay_verification(self, original_chain, exchanges):
+        transactions = [block for block in original_chain if block.is_transaction()]
+
+        last_index = 0
+        database = []
+        for tx in transactions:
+
+            # find matching exchange block, each transaction can be matched with an exchange
+            ex_tx = None
+            for block in reversed(original_chain[:tx.sequence_number]):
+                if block.is_exchange() and block.link_public_key == tx.link_public_key:
+                    ex_tx = block
+
+            for block in original_chain[last_index:tx.sequence_number]:
+                if block.is_exchange():
+                    ex = exchanges.exchanges.get(block.hash)
+                    if ex:
+                        exchange = self.database.index(ex)
+                        database.extend(exchange)
+                database.append(block)
+
+            expected_chain_length = -1
+            if ex_tx.link_sequence_number == UNKNOWN_SEQ:
+                expected_chain_length = ex_tx.transaction['chain_down']
+            else:
+                expected_chain_length = ex_tx.transaction['chain_up']
+
+            # get the chain of transaction party
+            chain = sorted([block for block in database if block.public_key == tx.link_public_key], key=lambda x: x.sequence_number)
+            
+            if len(chain) == 0:
+                return False
+            verification = verify_chain(chain, expected_chain_length)
+
+            if not verification:
+                return False
+
+            # # check for double spending
+            # last_block = chain[0]
+            # for block in chain[1:]:
+            #     if block.sequence_number == last_block.sequence_number and block.hash != last_block.hash:
+            #         return False
+            #     last_block = block
+
+            # last_index = tx.sequence_number - 1
+
+        return True
+
+def configure_advanced(agent):
+
+    @agent.add_handler(msg.PROTECT_BLOCKS_REPLY)
+    def protect_blocks_reply(self, sender, body):
+        """Handles a received PROTECT_BLOCKS_REPLY. A PROTECT exchange is ongoing, the responder
+        received the blocks the initiator had more than himself. Now the responder can check that
+        the blocks add up to all information of the agent as proven by the hashes of the exchange
+        blocks on the chain of the initiator. If the check succeeds, the agent shows his agreement
+        by sending his own chain and blocks that he has above the initiator in a
+        msg.PROTECT_CHAIN_BLOCKS message. If the check fails, the agent sends a msg.PROTECT_REJECT
+        message and adds the initiator to the ignore list.
+
+        Arguments:
+            sender {Address} -- Address string of the agent.
+            body {msg.Database} -- Body of the incoming message.
+        """
+
+        if self.request_cache.get(sender) is None:
+            logging.error('No open reqest found for this agent')
+            return
+
+        blocks = [Block.from_message(block) for block in body.blocks]
+
+        error = self.database.add_blocks(blocks)
+
+        if error:
+            self.logger.warning("Detected double spend of agent %s", PublicKey.from_bin(error.public_key).as_readable())
+        
+        self.request_cache.get(sender).transfer_up = blocks_to_hash(blocks)
+        self.request_cache.get(sender).transfer_up_index = BlockIndex.from_blocks(blocks)
+
+        verification = self.verify_exchange(self.request_cache.get(sender).chain,
+                                            self.request_cache.get(sender).exchanges)
+
+        verification = self.replay_verification(self.request_cache.get(sender).chain,
+                                                self.request_cache.get(sender).exchanges)
+
+        if verification:
+            own_chain = self.database.get_chain(self.public_key)
+            own_index = BlockIndex.from_blocks(self.database.get_all_blocks())
+            partner_index = self.request_cache.get(sender).index
+            index = (own_index - partner_index)
+
+            sub_database = []
+            if len(index) == 0:
+                self.request_cache.get(sender).transfer_up = ''
+                self.request_cache.get(sender).transfer_up_index = BlockIndex()
+            else:
+                sub_database = self.database.index(index)
+                self.request_cache.get(sender).transfer_down = blocks_to_hash(blocks)
+                self.request_cache.get(sender).transfer_down_index = index
+            self.request_cache.get(sender).chain_length_sent = len(own_chain)
+
+            db = msg.ChainAndBlocks(chain=[block.as_message() for block in own_chain],
+                                    blocks=[block.as_message() for block in sub_database],
+                                    exchange=self.exchange_storage.as_message())
+            self.com.send(sender, NewMessage(msg.PROTECT_CHAIN_BLOCKS, db))
+            self.request_cache.get(sender).update_state(RequestState.PROTECT_EXCHANGE)
+
+        else:
+            self.logger.error("Verification of %s's exchanges failed", sender)
+            self.request_cache.remove(sender)
+            self.ignore_list.append(sender)
+            self.com.send(sender, NewMessage(msg.PROTECT_REJECT, msg.Empty()))
+
+    @agent.add_handler(msg.PROTECT_CHAIN_BLOCKS)
+    def proect_chain_blocks(self, sender, body):
+        """Handles a received PROTECT_CHAIN_BLOCKS message. A PROTECT exchange is ongoing, the
+        initiator received chain, blocks and exchange data from the responder. The
+        initiator should check whether the responder is completely trustworthy and shares all his
+        data. The chain and exchange data is verified and only if the data checks out the next step
+        is done. That is the block proposal, all data is exchanged and both agents trust each other,
+        an exchange block can be created which includes the hashes of both sets of exchanged blocks.
+        If the verification fails the responder is added to the ignore list and a msg.PROTECT_REJECT
+        is sent.
+
+        Arguments:
+            sender {Address} -- Address string of the agent.
+            body {msg.ChainAndBlocks} -- Body of the incoming message.
+        """
+
+        if self.request_cache.get(sender) is None:
+            self.logger.error('No open reqest found for this agent')
+            return
+
+        chain = [Block.from_message(block) for block in body.chain]
+        blocks = [Block.from_message(block) for block in body.blocks]
+        exchanges = ExchangeStorage.from_message(body.exchange)
+
+        for block_hash, index in exchanges.exchanges.iteritems():
+            self.exchange_storage.exchanges[block_hash] = index
+
+        error = self.database.add_blocks(blocks)
+
+        if error:
+            self.logger.warning("Detected double spend of agent %s", PublicKey.from_bin(error.public_key).as_readable())
+
+        self.request_cache.get(sender).transfer_down = blocks_to_hash(blocks)
+        self.request_cache.get(sender).chain_length_received = len(chain)
+
+        verification = self.verify_chain(chain, len(chain)) and self.verify_exchange(chain, exchanges)
+
+        verification = self.replay_verification(chain, exchanges)
+        transfer_down = BlockIndex.from_blocks(blocks)
+
+        if verification:
+            partner = next((a for a in self.agents if a.address == sender), None)
+            payload = {'transfer_up': self.request_cache.get(sender).transfer_up.encode('hex'),
+                       'transfer_down': blocks_to_hash(blocks).encode('hex'),
+                       'chain_up': self.request_cache.get(sender).chain_length_sent,
+                       'chain_down': self.request_cache.get(sender).chain_length_received}
+            new_block = self.block_factory.create_new(partner.public_key, payload=payload)
+            self.com.send(partner.address, NewMessage(msg.PROTECT_BLOCK_PROPOSAL,
+                                                      new_block.as_message()))
+            self.exchange_storage.add_exchange(new_block, transfer_down)
+            self.request_cache.get(sender).update_state(RequestState.PROTECT_BLOCK)
+        else:
+            self.logger.warning("Verification of %s's exchanges failed", sender)
+            self.request_cache.remove(sender)
+            self.ignore_list.append(sender)
+            self.com.send(sender, NewMessage(msg.PROTECT_REJECT, msg.Empty()))

@@ -30,14 +30,11 @@ class Database(TrustChainDB):
         try:
             self.add_block(block)
         except sqlite3.IntegrityError:
-            logging.warning('Error adding block %s', block)
-
             if check_double_spend:
                 existing = self.get(block.public_key, block.sequence_number)
                 if existing.hash != block.hash:
-                    logging.warning('DOUBLE SPENDING DETECTED')
+                    logging.warning('DOUBLE SPENDING DETECTED at block %s', existing)
                     return existing
-                logging.warning("NO DOUBLE SPEND DETECTED")
         return False
 
     def add_blocks(self, blocks):
@@ -49,6 +46,7 @@ class Database(TrustChainDB):
 
         for block in blocks:
             result = self.add(block)
+
             if result != False:
                 return result
 

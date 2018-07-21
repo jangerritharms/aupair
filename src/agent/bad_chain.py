@@ -25,12 +25,13 @@ class BadChainProtectAgent(ProtectSimpleAgent):
         chain = self.database.get_chain(self.public_key)
 
         # manipulate the chain by removing an item
-        if len(chain) > 2:
-            chain.pop(random.randrange(len(chain)))
+        if len(chain) > 5:
+            chain.pop(4)
 
         db = msg.Database(info=self.get_info().as_message(),
                           blocks=[block.as_message() for block in chain])
         self.request_cache.new(partner.address, RequestState.PROTECT_INIT)
+        self.request_cache.get(partner.address).chain_length_sent = chain[-1].sequence_number
         self.com.send(partner.address, NewMessage(msg.PROTECT_CHAIN, db))
 
         self.logger.info("Start interaction with %s", partner.address)
