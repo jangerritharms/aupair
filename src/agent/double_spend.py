@@ -12,6 +12,10 @@ class DoubleSpendAgent(ProtectSimpleAgent):
 
     _type = "Double spender"
 
+    def __init__(self, *args, **kwargs):
+        super(DoubleSpendAgent, self).__init__(*args, **kwargs)
+        self.has_doublespent = False
+
     def verify_exchange(self, chain, exchanges):
         return True
 
@@ -28,12 +32,13 @@ class DoubleSpendAgent(ProtectSimpleAgent):
         chain = self.database.get_chain(self.public_key)
 
         # manipulate the chain by removing an item
-        if len(chain) > 3:
+        if len(chain) > 3 and not self.has_doublespent:
             if chain[-1].is_transaction():
                 self.logger.error("DOULBE SPENDING BABYYYYYYYYYYYYYYYYYYYYYYYYYYYYY")
                 block = chain[-1]
                 self.logger.error("Block removed: %s", block)
                 self.database.delete(self.public_key, block.sequence_number, 1)
+                self.has_doublespent = True
 
         chain = self.database.get_chain(self.public_key)
 
