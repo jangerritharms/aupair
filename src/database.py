@@ -37,7 +37,7 @@ class Database(TrustChainDB):
                     return existing
         return False
 
-    def add_blocks(self, blocks):
+    def add_blocks(self, blocks, check_double_spend=True):
         """Addes multiple blocks to the database.
         
         Arguments:
@@ -45,7 +45,7 @@ class Database(TrustChainDB):
         """
 
         for block in blocks:
-            result = self.add(block)
+            result = self.add(block, check_double_spend)
 
             if result != False:
                 return result

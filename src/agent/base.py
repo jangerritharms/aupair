@@ -99,6 +99,17 @@ class BaseAgent(object):
 
         return AgentInfo.from_agent(self)
 
+    def get_partner_by_public_key(self, public_key):
+        """Returns the partner as identified by the public key.
+        
+        Arguments:
+            public_key {PublicKey} -- PublicKey of the requested partner
+
+        Returns:
+            AgentInfo -- AgentInfo object of the requested partner, None if none is found
+        """
+        return next((a for a in self.agents if a.public_key == public_key), None)
+
     def request_interaction(self, partner=None):
         """Sends a block proposal to another known agent.
 
@@ -156,6 +167,7 @@ class BaseAgent(object):
         blocks = self.database._getall('', ())
         if hasattr(self, "ignore_list"):
             self.logger.info("Ignore list: [%s]", ",".join((a for a in set(self.ignore_list))))
+            self.logger.info("Replace rules: %s", self.replace_rules)
         with open(os.path.join('data', self.public_key.as_readable() + '.dat'), 'wb') as f:
             database = msg.Database(info=self.get_info().as_message(),
                                     blocks=[block.as_message() for block in blocks])

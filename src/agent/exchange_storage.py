@@ -23,6 +23,15 @@ class ExchangeStorage(object):
         """
         self.exchanges[block.hash] = index
 
+    def add_exchange_storage(self, storage):
+        """Adds exchanges from another storage object.
+
+        Arguments:
+            storage {ExchangeStorage} -- ExchangeStorage
+        """
+        for block_hash, index in storage.exchanges.iteritems():
+            self.exchanges[block_hash] = index
+
     def as_message(self):
         """Returns an exchange message.
         """

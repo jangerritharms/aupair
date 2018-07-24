@@ -170,3 +170,11 @@ class BlockIndex(object):
         string += ">}"
 
         return string
+
+    def remove(self, public_key):
+        """Removes the entries for a specific agent identified by the public_key.
+        
+        Arguments:
+            public_key {PublicKey} -- Public key of the agent to be removed from the index
+        """
+        self.entries = [entry for entry in self.entries if entry[0] != public_key.as_bin()]

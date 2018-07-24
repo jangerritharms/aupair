@@ -114,3 +114,14 @@ class Block(TrustChainBlock):
         exchange or not. For this usecase exchanges contain the "transfer_down" field.
         """
         return self.transaction.get('transfer_down')
+
+    def get_relevant_exchange(self):
+        """If the agent mentioned in public_key field is requester, the relevant exchange is what 
+        the agent downloaded, so "transfer_down", in that case the link_sequence_number is equal to 
+        UNKNOWN_SEQ. Otherwise the relevant exchange is "transfer_up".
+        """
+        if not self.is_exchange():
+            raise Exception("Block is not an exchange block and therefore has no relevant exchange")
+
+        return self.transaction['transfer_down'] if self.link_sequence_number == UNKNOWN_SEQ \
+            else self.transaction['transfer_up']

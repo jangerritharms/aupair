@@ -44,6 +44,8 @@ class ProtectSimpleAgent(BaseAgent):
     def __init__(self, *args, **kwargs):
         super(ProtectSimpleAgent, self).__init__(*args, **kwargs)
         self.ignore_list = []
+        self.replace_rules = {}
+        self.double_spends = []
         self.request_cache = RequestCache()
         self.exchange_storage = ExchangeStorage()
 
@@ -82,33 +84,53 @@ class ProtectSimpleAgent(BaseAgent):
         if random.choice(self.choices):
             self.request_protect()
 
-    def verify_chain(self, chain, expected_length):
-        """Verifies the correctness of a chain received by another agent. First check is only if the
-        chain is complete. 
-
+    def verify_chain_no_missing_blocks(self, chain, expected_length):
+        """Verifies that a chain of an expected length is complete, so no blocks are missing. This
+        is done by checking the list of sequence numbers of the blocks in the chain.
+        
         Arguments:
-            chain {[Block]} -- Agent's complete chain
-
+            chain {[Block]} -- Chain to be verified
+            expectedlength {int} -- Expected length of the chain.
+        
         Returns:
-            bool -- Outcome of the verification, True means correct, False means fraud
+            bool -- True of the chain is complete, False otherwise
         """
-
         # check missing blocks
         seq = [block.sequence_number for block in chain]
         if not Counter(seq[:expected_length]) == Counter(range(1, expected_length+1)):
-            self.logger.error("Chain does not have the correct sequence, expected 1 to %d", expected_length)
-            self.logger.error("%s", seq)
+            self.logger.error("Chain %s does not have the correct sequence, expected 1 to %d",
+                              seq, expected_length)
             return False
+
+        return True
+
+    def verify_chain_not_shorter_than_known(self, chain):
+        """Checks that the chain received is not shorter than we already know. If an agent shares
+        less blocks than we know the agent has, he is trying to double spend or manipulate.
+        
+        Arguments:
+            chain {[Block]} -- Chain to be verified
+        """
 
         max_seq = self.database.get_latest(chain[0].public_key)
-        if max_seq and seq[-1] < max_seq.sequence_number:
-            self.logger.error("Double spending detected for agent %s",
+        if max_seq and chain[-1].sequence_number < max_seq.sequence_number:
+            self.logger.error("Agent shared less blocks than we already know %s",
                               PublicKey.from_bin(chain[0].public_key).as_readable())
             return False
+        
+        return True
 
+    def verify_chain_tx_ex_pairs(self, chain):
+        """Verifies that each transaction on the chain can be paired with a previous exchange. The
+        current mechanism forces agents to have one exchange for each transaction. Not performing
+        an exchange previous to a transaction is seens as a manipulation attempt.
+        
+        Arguments:
+            chain {[Block]} -- Chain to be verified
+        """
         # check for enough exchanges: with protect each transaction should have an exchange before
-        transactions = [block for block in chain if block.transaction.get('up') is not None]
-        exchanges = [block for block in chain if block.transaction.get('transfer_down')]
+        transactions = [block for block in chain if block.is_transaction()]
+        exchanges = [block for block in chain if block.is_exchange()]
         for tx in transactions:
             exchange = next((block for block in exchanges
                             if block.public_key == tx.public_key and
@@ -124,7 +146,84 @@ class ProtectSimpleAgent(BaseAgent):
 
         return True
 
-    def verify_exchange(self, chain, exchange):
+    def verify_chain_for_double_spend(self, chain, expected_length):
+        """Verifies whether we know of any block in the shared chain which is part of a double
+        spend.
+        
+        Arguments:
+            chain {[Block]} -- Chain to be verified
+        """
+        for block in chain:
+            own_block = self.database.get(block.public_key, block.sequence_number)
+            if own_block and own_block.hash != block.hash:
+                self.found_double_spend(own_block, chain)
+            
+        return True
+
+
+    def verify_chain(self, chain, expected_length):
+        """Verifies the correctness of a chain received by another agent. First check is only if the
+        chain is complete. 
+
+        Arguments:
+            chain {[Block]} -- Agent's complete chain
+
+        Returns:
+            bool -- Outcome of the verification, True means correct, False means fraud
+        """
+
+        result = True
+
+        result = result and self.verify_chain_for_double_spend(chain, expected_length)
+        result = result and self.verify_chain_no_missing_blocks(chain, expected_length)
+        result = result and self.verify_chain_not_shorter_than_known(chain)
+        result = result and self.verify_chain_tx_ex_pairs(chain)
+
+        return result
+
+    def get_blocks_for_exchanges(self, exchange_summary_blocks, exchanges, partner_key):
+        """For each exchange block, retrieves the list of blocks that were in the exchange.
+        
+        Arguments:
+            exchange_summary_blocks {[Block]} -- List of exchange blocks
+        """
+        # get the blocks that make up the exchanges
+        exchange_blocks = []
+        for block in exchange_summary_blocks:
+            ex = exchanges.exchanges.get(block.hash)
+            if ex is not None:
+                if len(ex) == 0:
+                    exchange_blocks.append([])
+                else:
+                    blocks = self.database.index(ex)
+
+                    if len(blocks) == 0:
+                        self.logger.error('Blocks not found in database')
+
+                    for block1, block2 in self.replace_rules.get(partner_key, []):
+                        if block1 in blocks:
+                            blocks = [b if b.hash != block1.hash else block2 for b in blocks]
+
+                    exchange_blocks.append(blocks)
+            else:
+                self.logger.error('Block is not mentioned in exchanges.')
+                return []
+
+        return exchange_blocks
+
+    def known_double_spend(self, transfer_hash, blocks, public_key):
+        for block1, block2 in self.double_spends:
+            if block1 in blocks:
+                replaced_blocks = [b if b.hash != block1.hash else block2 for b in blocks]
+                if transfer_hash == blocks_to_hash(replaced_blocks).encode('hex'):
+                    self.replace_rules.setdefault(public_key, []).append((block1, block2))
+                    self.logger.info("Solved by known double spend")
+                    self.logger.info("Added replacement rule for agent %s",public_key)
+                    return True
+
+        return False
+
+    def verify_exchange(self, chain, exchanges):
         """Verfies whether the exchanges that an agent sends are matching the exchange blocks on his
         chain.
 
@@ -132,55 +231,60 @@ class ProtectSimpleAgent(BaseAgent):
             chain {[Block]} -- [description]
             exchange {{hash: Index}} -- [description]
         """
-
+        partner_key = PublicKey.from_bin(chain[0].public_key).as_readable()
         # get exchange blocks on the chain
-        exchange_summary_blocks = [block for block in chain
-                                   if block.transaction.get('transfer_down') is not None]
+        exchange_summary_blocks = [block for block in chain if block.is_exchange()]
 
         # check 1: exchange and exchange blocks have the same length
-        if not len(exchange_summary_blocks) <= len(exchange):
+        if not len(exchange_summary_blocks) <= len(exchanges):
             self.logger.error("exchanges and exchange blocks are not the same length")
             return False
 
         # get the blocks that make up the exchanges
-        exchange_blocks = []
-        for block in exchange_summary_blocks:
-            if block.hash in exchange.exchanges:
-                if len(exchange.exchanges[block.hash]) == 0:
-                    exchange_blocks.append([])
-                else:
-                    blocks = self.database.index(exchange.exchanges[block.hash])
+        exchange_blocks = self.get_blocks_for_exchanges(exchange_summary_blocks, exchanges, partner_key)
 
-                    if len(blocks) == 0:
-                        self.logger.error('Blocks not found in database')
-
-                    exchange_blocks.append(self.database.index(exchange.exchanges[block.hash]))
-            else:
-                self.logger.error('Block is not mentioned in exchanges.')
-                return False
-
-        if not len(exchange_blocks) <= len(exchange):
+        if not len(exchange_blocks) <= len(exchanges):
             self.logger.error("Exchange blocks don't match exchanges")
             return False
 
         # compare hashes
         for block, blocks in zip(exchange_summary_blocks, exchange_blocks):
-            if block.link_sequence_number == UNKNOWN_SEQ:
-                if block.transaction['transfer_down'] != blocks_to_hash(blocks).encode('hex'):
-                    partner = next((a for a in self.agents if a.public_key == PublicKey.from_bin(chain[0].public_key)), None)
-
-                    self.com.send(partner.address, NewMessage(msg.PROTECT_EXCHANGE_REQUEST,
-                                                      msg.ExchangeRequest(exchange_hash=block.hash)))
-                    self.logger.error("wrong exchange hash")
-            else:
-                if block.transaction['transfer_up'] != blocks_to_hash(blocks).encode('hex'):
-                    partner = next((a for a in self.agents if a.public_key == PublicKey.from_bin(chain[0].public_key)), None)
-
-                    self.com.send(partner.address, NewMessage(msg.PROTECT_EXCHANGE_REQUEST,
-                                                      msg.ExchangeRequest(exchange_hash=block.hash)))
-                    self.logger.error("wrong exchange hash")
+            transfer_hash = block.get_relevant_exchange()
+            if transfer_hash != blocks_to_hash(blocks).encode('hex'):
+                if self.known_double_spend(transfer_hash, blocks, partner_key):
+                    self.logger.error("Known double spend")
+                    continue
+                else:
+                    self.logger.error("Exchange block does not match a hash")
+                    return block.hash
 
         return True
+
+    def get_own_block_index(self):
+        """Returns block index of this agents database.
+        """
+        return BlockIndex.from_blocks(self.database.get_all_blocks())
+
+    def get_index_from_exchanges_and_chain(self, exchanges, chain):
+        """Calculates the block index from the chain and exchanges of another agent.
+        """
+        partner_index = BlockIndex()
+
+        for block_hash, index in exchanges.exchanges.iteritems():
+            self.exchange_storage.exchanges[block_hash] = index
+            partner_index = partner_index + index
+        partner_index += BlockIndex.from_blocks(chain)
+
+        return partner_index
+
+    def found_double_spend(self, own_version, blocks):
+        block_match = [b for b in blocks if b.public_key == own_version.public_key and
+                           b.sequence_number == own_version.sequence_number]
+        self.double_spends.append((own_version, block_match[0]))
+        partner = self.get_partner_by_public_key(PublicKey.from_bin(own_version.public_key))
+        self.ignore_list.append(partner.address)
+        self.logger.info("Will ignore %s because of double spend",
+                            partner.public_key.as_readable())
 
     def configure_message_handlers(self):
         super(ProtectSimpleAgent, self).configure_message_handlers()
@@ -267,17 +371,14 @@ def configure_protect(agent):
 
         exchanges = ExchangeStorage.from_message(body)
 
-        partner_index = BlockIndex()
-        for block_hash, index in exchanges.exchanges.iteritems():
-            self.exchange_storage.exchanges[block_hash] = index
-            partner_index = partner_index + index
-        partner_index += BlockIndex.from_blocks(self.request_cache.get(sender).chain)
+        self.exchange_storage.add_exchange_storage(exchanges)
+        partner_index = self.get_index_from_exchanges_and_chain(exchanges,
+                                                                self.request_cache.get(sender).chain)
 
-        own_index = BlockIndex.from_blocks(self.database.get_all_blocks())
+        db = (partner_index - self.get_own_block_index())
+        db.remove(self.get_info().public_key)
 
-        db = (partner_index - own_index).as_message()
-
-        self.com.send(sender, NewMessage(msg.PROTECT_BLOCKS_REQUEST, db))
+        self.com.send(sender, NewMessage(msg.PROTECT_BLOCKS_REQUEST, db.as_message()))
 
         self.request_cache.get(sender).index = partner_index
         self.request_cache.get(sender).exchanges = exchanges
@@ -337,27 +438,30 @@ def configure_protect(agent):
 
         blocks = [Block.from_message(block) for block in body.blocks]
 
-        error = self.database.add_blocks(blocks)
+        error_blocks = self.database.add_blocks(blocks)
 
-        if error:
-            self.logger.warning("Detected double spend of agent %s", PublicKey.from_bin(error.public_key).as_readable())
+        if error_blocks:
+            self.database.add_blocks(blocks, False)
+            self.logger.warning("Detected double spend of agent %s", PublicKey.from_bin(error_blocks.public_key).as_readable())
         
         self.request_cache.get(sender).transfer_up = blocks_to_hash(blocks)
         self.request_cache.get(sender).transfer_up_index = BlockIndex.from_blocks(blocks)
 
         verification = self.verify_exchange(self.request_cache.get(sender).chain,
                                             self.request_cache.get(sender).exchanges)
+        self.logger.error("Verification returned %s", verification)
 
-        if verification:
+        if verification is True:
             own_chain = self.database.get_chain(self.public_key)
             own_index = BlockIndex.from_blocks(self.database.get_all_blocks())
             partner_index = self.request_cache.get(sender).index
             index = (own_index - partner_index)
+            index.remove(PublicKey.from_bin(self.request_cache.get(sender).chain[0].public_key))
 
             sub_database = []
             if len(index) == 0:
-                self.request_cache.get(sender).transfer_up = ''
-                self.request_cache.get(sender).transfer_up_index = BlockIndex()
+                self.request_cache.get(sender).transfer_down = ''
+                self.request_cache.get(sender).transfer_down_index = BlockIndex()
             else:
                 sub_database = self.database.index(index)
                 self.request_cache.get(sender).transfer_down = blocks_to_hash(blocks)
@@ -370,11 +474,20 @@ def configure_protect(agent):
             self.com.send(sender, NewMessage(msg.PROTECT_CHAIN_BLOCKS, db))
             self.request_cache.get(sender).update_state(RequestState.PROTECT_EXCHANGE)
 
-        else:
+        elif verification is False:
             self.logger.error("Verification of %s's exchanges failed", sender)
             self.request_cache.remove(sender)
             self.ignore_list.append(sender)
             self.com.send(sender, NewMessage(msg.PROTECT_REJECT, msg.Empty()))
+
+        elif type(verification) is str:
+            block_hash = verification
+            self.logger.warning("Verification of hash was not correct, finding double spend")
+            self.request_cache.get(sender).update_state(
+                RequestState.PROTECT_EXCHANGE_CLARIFICATION_RESPONDER)
+            self.com.send(sender,
+                          NewMessage(msg.PROTECT_EXCHANGE_REQUEST,
+                                     msg.ExchangeRequest(exchange_hash=verification)))
 
     @agent.add_handler(msg.PROTECT_CHAIN_BLOCKS)
     def proect_chain_blocks(self, sender, body):
@@ -400,13 +513,16 @@ def configure_protect(agent):
         blocks = [Block.from_message(block) for block in body.blocks]
         exchanges = ExchangeStorage.from_message(body.exchange)
 
-        for block_hash, index in exchanges.exchanges.iteritems():
-            self.exchange_storage.exchanges[block_hash] = index
+        self.exchange_storage.add_exchange_storage(exchanges)
 
-        error = self.database.add_blocks(blocks)
+        error_chain = self.database.add_blocks(chain)
+        error_blocks = self.database.add_blocks(blocks)
 
-        if error:
-            self.logger.warning("Detected double spend of agent %s", PublicKey.from_bin(error.public_key).as_readable())
+        if error_chain or error_blocks:
+            self.database.add_blocks(chain, False)
+            self.database.add_blocks(blocks, False)
+            self.found_double_spend(error_chain, chain)
+            self.logger.warning("Detected double spend of agent %s", PublicKey.from_bin(error_chain.public_key).as_readable())
 
         self.request_cache.get(sender).transfer_down = blocks_to_hash(blocks)
         self.request_cache.get(sender).chain_length_received = len(chain)
@@ -414,7 +530,7 @@ def configure_protect(agent):
         verification = self.verify_chain(chain, len(chain)) and self.verify_exchange(chain, exchanges)
         transfer_down = BlockIndex.from_blocks(blocks)
 
-        if verification:
+        if verification is True:
             partner = next((a for a in self.agents if a.address == sender), None)
             payload = {'transfer_up': self.request_cache.get(sender).transfer_up.encode('hex'),
                        'transfer_down': blocks_to_hash(blocks).encode('hex'),
@@ -425,11 +541,18 @@ def configure_protect(agent):
                                                       new_block.as_message()))
             self.exchange_storage.add_exchange(new_block, transfer_down)
             self.request_cache.get(sender).update_state(RequestState.PROTECT_BLOCK)
-        else:
+        elif verification is False:
             self.logger.warning("Verification of %s's exchanges failed", sender)
             self.request_cache.remove(sender)
             self.ignore_list.append(sender)
             self.com.send(sender, NewMessage(msg.PROTECT_REJECT, msg.Empty()))
+        elif type(verification) is str:
+            self.logger.warning("Verification of hash was not correct, finding double spend")
+            self.request_cache.get(sender).update_state(
+                RequestState.PROTECT_EXCHANGE_CLARIFICATION_INITIATOR)
+            self.com.send(sender,
+                          NewMessage(msg.PROTECT_EXCHANGE_REQUEST,
+                                     msg.ExchangeRequest(exchange_hash=verification)))
 
     @agent.add_handler(msg.PROTECT_BLOCK_PROPOSAL)
     def protect_block_proposal(self, sender, body):
@@ -569,9 +692,29 @@ def configure_protect(agent):
         result = self.database.add_blocks(blocks)
 
         if result:
-            partner = next((a for a in self.agents if a.public_key == PublicKey.from_bin(result.public_key)), None)
-            self.ignore_list.append(partner.address)
-            self.logger.info("Will ignore %s because of double spend", partner.public_key.as_readable())
+            self.found_double_spend(result, blocks)
+            partner = self.get_partner_by_public_key(PublicKey.from_bin(result.public_key))
+            
+            if partner.address == sender:
+                self.logger.warning("Verification of %s's exchanges failed", sender)
+                self.request_cache.remove(sender)
+                self.ignore_list.append(sender)
+                self.com.send(sender, NewMessage(msg.PROTECT_REJECT, msg.Empty()))
+            else:
+                request = self.request_cache.get(sender)
+                if request.state == RequestState.PROTECT_EXCHANGE_CLARIFICATION_RESPONDER:
+                    db = (request.index - self.get_own_block_index()).as_message()
+
+                    self.com.send(sender, NewMessage(msg.PROTECT_BLOCKS_REQUEST, db))
+                elif request.state == RequestState.PROTECT_EXCHANGE_CLARIFICATION_INITIATOR:
+                    self.logger.warning("Transfer_up_index: %s", request.transfer_up_index)
+                    blocks = []
+                    if len(request.transfer_up_index) > 0:
+                        blocks = self.database.index(request.transfer_up_index)
+
+                    db = msg.Database(info=self.get_info().as_message(),
+                                      blocks=[block.as_message() for block in blocks])
+                    self.com.send(sender, NewMessage(msg.PROTECT_BLOCKS_REPLY, db))
 
     @agent.add_handler(msg.PROTECT_REJECT)
     def protect_reject(self, sender, body):

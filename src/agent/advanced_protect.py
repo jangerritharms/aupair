@@ -5,6 +5,7 @@ from collections import Counter
 
 import src.communication.messages_pb2 as msg
 
+from src.public_key import PublicKey
 from src.agent.simple_protect import ProtectSimpleAgent
 from src.communication.messages import NewMessage
 from src.agent.request_cache import RequestState
@@ -27,7 +28,7 @@ def blocks_to_hash(blocks):
         return ''
     return sha256(hash_string).digest()
 
-def verify_chain(chain, expected_length):
+def verify_chain_no_missing_blocks(chain, expected_length):
     """Verifies the correctness of a chain received by another agent. First check is only if the
     chain is complete. 
 
@@ -72,8 +73,14 @@ class ProtectAdvancedAgent(ProtectSimpleAgent):
         super(ProtectAdvancedAgent, self).configure_message_handlers()
         configure_advanced(self)
 
+    def verify_internal_state_for_transaction(tx, ex, chain_partner):
+        result = True
+
+        result = result and verify_chain_no_missing_blocks
+
     def replay_verification(self, original_chain, exchanges):
         transactions = [block for block in original_chain if block.is_transaction()]
+        partner = self.get_partner_by_public_key(PublicKey.from_bin(original_chain[0].public_key))
 
         last_index = 0
         database = []
@@ -104,20 +111,57 @@ class ProtectAdvancedAgent(ProtectSimpleAgent):
             
             if len(chain) == 0:
                 return False
-            verification = verify_chain(chain, expected_chain_length)
+            verification = verify_chain_no_missing_blocks(chain, expected_chain_length)
 
             if not verification:
+                self.logger.error("REPLAY VERIFICATION chain not compiled correctly")
                 return False
 
-            # # check for double spending
-            # last_block = chain[0]
-            # for block in chain[1:]:
-            #     if block.sequence_number == last_block.sequence_number and block.hash != last_block.hash:
-            #         return False
-            #     last_block = block
+            #############################
+            # At this point the chain seems to be in a complete state
+            #############################
 
-            # last_index = tx.sequence_number - 1
+            # get exchange blocks on the chain
+            exchange_summary_blocks = [block for block in chain[:expected_chain_length]
+                                       if block.transaction.get('transfer_down') is not None]
+            
+            # get the blocks that make up the exchanges
+            exchange_blocks = []
+            for block in exchange_summary_blocks:
+                if block.hash in exchanges.exchanges:
+                    if len(exchanges.exchanges[block.hash]) == 0:
+                        exchange_blocks.append([])
+                    else:
+                        blocks = self.database.index(exchanges.exchanges[block.hash])
 
+                        for rule in self.replace_rules.get(partner.public_key, []):
+                            if rule[0] in blocks:
+                                blocks = [b if b != rule[0] else rule[1] for b in blocks]
+
+                        if len(blocks) == 0:
+                            self.logger.error('Blocks not found in database')
+
+                        exchange_blocks.append(blocks)
+                else:
+                    self.logger.error('Block is not mentioned in exchanges.')
+                    self.logger.error("Block %s", block)
+                    self.logger.error("Exchanges %s", exchanges)
+                    self.logger.error("Original chain: [%s]", ",".join(("%s" % block for block in original_chain)))
+                    self.logger.error("chain: [%s]", ",".join(("%s" % block for block in chain)))
+                    return False
+            
+            if not len(exchange_blocks) <= len(exchanges):
+                self.logger.error("Exchange blocks don't match exchanges")
+                return False
+
+            # compare hashes
+            for block, blocks in zip(exchange_summary_blocks, exchange_blocks):
+                if block.link_sequence_number == UNKNOWN_SEQ:
+                    if block.transaction['transfer_down'] != blocks_to_hash(blocks).encode('hex'):
+                        self.logger.error("REPLAY VERIFICATION wrong exchange hash")
+                else:
+                    if block.transaction['transfer_up'] != blocks_to_hash(blocks).encode('hex'):
+                        self.logger.error("REPLAY VERIFICATION wrong exchange hash")
         return True
 
 def configure_advanced(agent):
