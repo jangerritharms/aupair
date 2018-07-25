@@ -22,6 +22,15 @@ class BlockIndex(object):
 
         self.entries = entries
 
+    def get(self, public_key):
+        """Get the indeces of a specific public key in this index
+        
+        Arguments:
+            public_key {string} -- Binary public key
+        """
+        return next((index for key, index in self.entries if key == public_key), [])
+
+
     @classmethod
     def from_chain(cls, chain):
         """Calculates the index of a given chain.

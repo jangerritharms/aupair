@@ -26,6 +26,8 @@ class NoVerificationAgent(ProtectSimpleAgent):
         #     self.logger.error("FOUND THE MISSING BLOCK")
         return True
 
+    def found_double_spend(self, own_version, blocks):
+        pass
 
 def configure_noverification(agent):
 

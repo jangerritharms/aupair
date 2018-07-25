@@ -125,3 +125,13 @@ class Block(TrustChainBlock):
 
         return self.transaction['transfer_down'] if self.link_sequence_number == UNKNOWN_SEQ \
             else self.transaction['transfer_up']
+
+    def get_relevant_chain_length(self):
+        """Transfer blocks also record the chain of both parties shared up to that point.
+        """
+        if not self.is_double_exchange():
+            raise Exception("Block is not a double exchange block and therefore has no relevant\
+            chain length")
+
+        return self.transaction['chain_down'] if self.link_sequence_number == UNKNOWN_SEQ \
+            else self.transaction['chain_up']

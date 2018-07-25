@@ -101,3 +101,20 @@ class Database(TrustChainDB):
         query = 'WHERE (public_key, sequence_number) IN (VALUES {})'.format(
             ','.join(['(?,?)']*len(args)))
         return self._getall(query, tuple(db_args))
+
+    def index_with_replacements(self, index, replacements):
+        """Get blocks from the database with specific replacements in order to simulate another
+        agent.
+        
+        Arguments:
+            index {BlockIndex} -- Index, defining which subset of blocks to return
+            replacements {[(Block, Block)]} -- List of tuples with first element the block to be
+                replaced and the second element the block to fill in 
+        """
+        blocks = self.index(index)
+
+        for block1, block2 in replacements:
+            if block1 in blocks:
+                blocks = [b if b.hash != block1.hash else block2 for b in blocks]
+        
+        return blocks

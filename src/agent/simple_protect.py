@@ -45,7 +45,7 @@ class ProtectSimpleAgent(BaseAgent):
         super(ProtectSimpleAgent, self).__init__(*args, **kwargs)
         self.ignore_list = []
         self.replace_rules = {}
-        self.knows_about_double_spend = []
+        self.knows_about_double_spender = {}
         self.double_spends = []
         self.request_cache = RequestCache()
         self.exchange_storage = ExchangeStorage()
@@ -140,6 +140,7 @@ class ProtectSimpleAgent(BaseAgent):
 
             if exchange is None:
                 self.logger.error("Not enough exchange blocks found")
+                self.logger.error("Tx block %s has no matching exchange", tx)
                 self.logger.error("Chain [%s]", ",".join(("%s" % block for block in chain)))
                 return False
 
@@ -158,6 +159,7 @@ class ProtectSimpleAgent(BaseAgent):
             own_block = self.database.get(block.public_key, block.sequence_number)
             if own_block and own_block.hash != block.hash:
                 self.found_double_spend(own_block, chain)
+                return False
             
         return True
 
@@ -232,6 +234,7 @@ class ProtectSimpleAgent(BaseAgent):
                 self.logger.info("replaced blocks hash: %s", blocks_to_hash(replaced_blocks).encode('hex'))
                 if transfer_hash == blocks_to_hash(replaced_blocks).encode('hex'):
                     self.replace_rules.setdefault(public_key, []).append((block1, block2))
+                    
                     self.logger.info("Solved by known double spend")
                     self.logger.info("Added replacement rule for agent %s",public_key)
                     return True
@@ -734,6 +737,12 @@ def configure_protect(agent):
         if not result:
             self.logger.error("No error found in the exchange blocks")
             self.logger.error("Blocks: %s", ",".join(("%s" % b for b in blocks)))
+            # if we find no error that means the other agent should also have
+            # detected the wrong exchange
+            self.logger.warning("Verification of %s's exchanges failed", sender)
+            self.request_cache.remove(sender)
+            self.ignore_list.append(sender)
+            self.com.send(sender, NewMessage(msg.PROTECT_REJECT, msg.Empty()))
 
         if result:
             self.found_double_spend(result, blocks)

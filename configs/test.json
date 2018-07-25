@@ -5,6 +5,10 @@
       "count": 3
     },
     {
+      "type": "Validation free-rider",
+      "count": 1
+    },
+    {
       "type": "Double spender",
       "count": 1
     }
