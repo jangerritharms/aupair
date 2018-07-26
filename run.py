@@ -22,6 +22,14 @@ def main():
         type=argparse.FileType('r'),
         help='The experiment configuration file.'
     )
+    parser.add_argument(
+        '--data',
+        help='Directory of data files'
+    )
+    parser.add_argument(
+        '--plot',
+        help='Which plot to show'
+    )
 
     args = parser.parse_args()
 
@@ -30,7 +38,7 @@ def main():
         runner.load_configuration(args.config)
         runner.run()
     elif args.command == 'analyze':
-        runner.analysis()
+        runner.analysis(args.plot, args.data)
 
 
 

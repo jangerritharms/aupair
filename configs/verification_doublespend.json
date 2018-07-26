@@ -2,7 +2,7 @@
   "node_groups": [
     {
       "type": "Replay verifier",
-      "count": 3
+      "count": 4
     },
     {
       "type": "Validation free-rider",
@@ -13,8 +13,9 @@
       "count": 1
     }
   ],
+  "data_directory": "verification_doublespend",
   "discovery_port": 8000,
   "node_port_range_begin": 10000,
-  "emulation_duration": 100,
+  "emulation_duration": 200,
   "startup_time": 1
 }

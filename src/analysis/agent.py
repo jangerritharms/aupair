@@ -31,7 +31,7 @@ class Agent:
     def size_database(self):
         return len(self.blocks)
 
-    def transactions_blocks(self):
+    def number_of_transactions(self):
         blocks = [block for block in self.blocks
                   if block.public_key == self.info.public_key.as_bin() and
                   block.transaction.get('up')]
@@ -42,6 +42,9 @@ class Agent:
                       block.link_sequence_number == tx.sequence_number)]
 
         return len(agreement)
+
+    def transaction_blocks(self):
+        return [block for block in self.blocks if block.is_transaction() and block.public_key == self.info.public_key.as_bin()]
 
     def exchange_blocks(self):
         blocks = [block for block in self.blocks

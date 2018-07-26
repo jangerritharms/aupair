@@ -67,6 +67,7 @@ message Block {
     required bytes previous_hash = 6;
     required bytes signature = 7;
     optional bytes hash = 8;
+    optional bytes insert_time = 9;
 }
 
 message Database {

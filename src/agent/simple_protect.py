@@ -225,13 +225,7 @@ class ProtectSimpleAgent(BaseAgent):
     def known_double_spend(self, transfer_hash, blocks, public_key):
         for block1, block2 in self.double_spends:
             if block1 in blocks:
-                self.logger.info("Block 1 in blocks")
-                self.logger.info("hash of block1 %s", blocks_to_hash([block1]).encode('hex'))
-                self.logger.info("hash of block2 %s", blocks_to_hash([block2]).encode('hex'))
                 replaced_blocks = [b if b.hash != block1.hash else block2 for b in blocks]
-                self.logger.info("transfer hash: %s", transfer_hash)
-                self.logger.info("block hash: %s", blocks_to_hash(blocks).encode('hex'))
-                self.logger.info("replaced blocks hash: %s", blocks_to_hash(replaced_blocks).encode('hex'))
                 if transfer_hash == blocks_to_hash(replaced_blocks).encode('hex'):
                     self.replace_rules.setdefault(public_key, []).append((block1, block2))
                     
@@ -239,23 +233,7 @@ class ProtectSimpleAgent(BaseAgent):
                     self.logger.info("Added replacement rule for agent %s",public_key)
                     return True
             if block2 in blocks:
-                self.logger.info("Block 1 in blocks")
-                self.logger.info("hash of block1 %s", blocks_to_hash([block1]).encode('hex'))
-                self.logger.info("hash of block2 %s", blocks_to_hash([block2]).encode('hex'))
-                replaced_blocks = [b if b.hash != block1.hash else block2 for b in blocks]
-                self.logger.info("transfer hash: %s", transfer_hash)
-                self.logger.info("block hash: %s", blocks_to_hash(blocks).encode('hex'))
-                self.logger.info("replaced blocks hash: %s", blocks_to_hash(replaced_blocks).encode('hex'))
                 self.knows_about_double_spend.append(public_key)
-                self.logger.error("%s Knows about double spend", public_key)
-                # replaced_blocks = [b if b.hash != block2.hash else block1 for b in blocks]
-                # self.logger.info("transfer hash: %s", transfer_hash)
-                # self.logger.info("")
-                # self.logger.info("block hash: %s", blocks_to_hash(blocks).encode('hex'))
-                # self.logger.info("replaced blocks hash: %s", blocks_to_hash(replaced_blocks).encode('hex'))
-                # if transfer_hash == blocks_to_hash(replaced_blocks).encode('hex'):
-                #     # self.replace_rules.setdefault(public_key, []).append((block1, block2))
-                #     self.logger.info("Solved by known double spend with block2")
                 return True
 
         return False

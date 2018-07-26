@@ -46,22 +46,6 @@ def verify_chain_no_missing_blocks(chain, expected_length):
         logging.error("%s", seq)
         return False
 
-    # # check for enough exchanges: with protect each transaction should have an exchange before
-    # transactions = [block for block in chain if block.transaction.get('up') is not None]
-    # exchanges = [block for block in chain if block.transaction.get('transfer_down')]
-    # for tx in transactions:
-    #     exchange = next((block for block in exchanges
-    #                     if block.public_key == tx.public_key and
-    #                     block.link_public_key == tx.link_public_key and
-    #                     block.sequence_number < tx.sequence_number), None)
-
-    #     if exchange is None:
-    #         self.logger.error("Not enough exchange blocks found")
-    #         self.logger.error("Chain [%s]", ",".join(("%s" % block for block in chain)))
-    #         return False
-
-    #     exchanges.remove(exchange)
-
     return True
 
 
@@ -95,6 +79,10 @@ class ProtectAdvancedAgent(ProtectSimpleAgent):
                 partner_seq = current_index.get(block.link_public_key)
 
                 if not Counter(partner_seq[:expected_length]) == Counter(range(1, expected_length+1)):
+                    self.logger.error("Exchange block: %s", block)
+                    self.logger.error("Current chain: %s", ",".join(("%s" % b for b in current_chain)))
+                    self.logger.error("Exchanges: %s", exchanges)
+                    self.logger.error("Current index: %s", current_index)
                     self.logger.error("REPLAY VERIFICATION: Chain does not have right sequence")
                     return False
                 
@@ -129,99 +117,10 @@ class ProtectAdvancedAgent(ProtectSimpleAgent):
                             if not transfer_hash == blocks_to_hash(exchange_blocks).encode('hex'):
                                 for block1, block2 in self.double_spends:
                                     if block1 in exchange_blocks or block2 in exchange_blocks:
-                                        # self.logger.error("Exchange block: %s", partner_block)
-                                        # self.logger.error("Exchange blocks: %s", ",".join(("%s" % b for b in exchange_blocks)))
                                         should_ignore.append(block1.public_key)
 
         return True
 
-    # def replay_verification(self, original_chain, exchanges):
-    #     transactions = [block for block in original_chain if block.is_transaction()]
-    #     partner = self.get_partner_by_public_key(PublicKey.from_bin(original_chain[0].public_key))
-
-    #     last_index = 0
-    #     database = []
-    #     for tx in transactions:
-
-    #         # find matching exchange block, each transaction can be matched with an exchange
-    #         ex_tx = None
-    #         for block in reversed(original_chain[:tx.sequence_number]):
-    #             if block.is_exchange() and block.link_public_key == tx.link_public_key:
-    #                 ex_tx = block
-
-    #         for block in original_chain[last_index:tx.sequence_number]:
-    #             if block.is_exchange():
-    #                 ex = exchanges.exchanges.get(block.hash)
-    #                 if ex:
-    #                     exchange = self.database.index(ex)
-    #                     database.extend(exchange)
-    #             database.append(block)
-
-    #         expected_chain_length = -1
-    #         if ex_tx.link_sequence_number == UNKNOWN_SEQ:
-    #             expected_chain_length = ex_tx.transaction['chain_down']
-    #         else:
-    #             expected_chain_length = ex_tx.transaction['chain_up']
-
-    #         # get the chain of transaction party
-    #         chain = sorted([block for block in database if block.public_key == tx.link_public_key], key=lambda x: x.sequence_number)
-            
-    #         if len(chain) == 0:
-    #             return False
-    #         verification = verify_chain_no_missing_blocks(chain, expected_chain_length)
-
-    #         if not verification:
-    #             self.logger.error("REPLAY VERIFICATION chain not compiled correctly for transaction %s and exchange %s", tx, ex_tx)
-    #             self.logger.error("Chain: %s", ",".join(("%s" % block for block in original_chain)))
-    #             self.logger.error("Exchanges: %s", exchanges)
-    #             return False
-
-    #         #############################
-    #         # At this point the chain seems to be in a complete state
-    #         #############################
-
-    #         # get exchange blocks on the chain
-    #         exchange_summary_blocks = [block for block in chain[:expected_chain_length]
-    #                                    if block.transaction.get('transfer_down') is not None]
-            
-    #         # get the blocks that make up the exchanges
-    #         exchange_blocks = []
-    #         for block in exchange_summary_blocks:
-    #             if block.hash in exchanges.exchanges:
-    #                 if len(exchanges.exchanges[block.hash]) == 0:
-    #                     exchange_blocks.append([])
-    #                 else:
-    #                     blocks = self.database.index(exchanges.exchanges[block.hash])
-
-    #                     for block1, block2 in self.replace_rules.get(partner.public_key.as_readable(), []):
-    #                         if block1 in blocks:
-    #                             blocks = [b if b.hash != block1.hash else block2 for b in blocks]
-
-    #                     if len(blocks) == 0:
-    #                         self.logger.error('Blocks not found in database')
-
-    #                     exchange_blocks.append(blocks)
-    #             else:
-    #                 self.logger.error('Block is not mentioned in exchanges.')
-    #                 self.logger.error("Block %s", block)
-    #                 self.logger.error("Exchanges %s", exchanges)
-    #                 self.logger.error("Original chain: [%s]", ",".join(("%s" % block for block in original_chain)))
-    #                 self.logger.error("chain: [%s]", ",".join(("%s" % block for block in chain)))
-    #                 return False
-            
-    #         if not len(exchange_blocks) <= len(exchanges):
-    #             self.logger.error("Exchange blocks don't match exchanges")
-    #             return False
-
-    #         # compare hashes
-    #         for block, blocks in zip(exchange_summary_blocks, exchange_blocks):
-    #             if block.link_sequence_number == UNKNOWN_SEQ:
-    #                 if block.transaction['transfer_down'] != blocks_to_hash(blocks).encode('hex'):
-    #                     self.logger.error("REPLAY VERIFICATION wrong exchange hash")
-    #             else:
-    #                 if block.transaction['transfer_up'] != blocks_to_hash(blocks).encode('hex'):
-    #                     self.logger.error("REPLAY VERIFICATION wrong exchange hash")
-    #     return True
 
 def configure_advanced(agent):
 

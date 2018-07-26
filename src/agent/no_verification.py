@@ -20,10 +20,6 @@ class NoVerificationAgent(ProtectSimpleAgent):
         return True
 
     def verify_chain(self, chain, expected_lenth):
-        # partner = next((a for a in self.agents if a.address == 'tcp://127.0.0.1:10004'), None)
-        # block = self.database.get(partner.public_key.as_buffer(), 5)
-        # if block:
-        #     self.logger.error("FOUND THE MISSING BLOCK")
         return True
 
     def found_double_spend(self, own_version, blocks):

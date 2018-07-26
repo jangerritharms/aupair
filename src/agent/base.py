@@ -81,6 +81,7 @@ class BaseAgent(object):
 
         self.options['duration'] = options['emulation_duration']
         self.options['startup_time'] = options['startup_time']
+        self.options['data'] = options['data_directory']
         self.options['discovery_server'] = 'tcp://localhost:' + str(options['discovery_port'])
 
         self.database = Database('', 'db_' + str(port))
@@ -168,7 +169,15 @@ class BaseAgent(object):
         if hasattr(self, "ignore_list"):
             self.logger.info("Ignore list: [%s]", ",".join((a for a in set(self.ignore_list))))
             self.logger.info("Replace rules: %s", self.replace_rules)
-        with open(os.path.join('data', self.public_key.as_readable() + '.dat'), 'wb') as f:
+
+        if not os.path.exists(self.options['data']):
+            try:
+                os.makedirs(self.options['data'])
+            except OSError as exc: # Guard against race condition
+                if exc.errno != errno.EEXIST:
+                    raise
+
+        with open(os.path.join(self.options['data'], self.public_key.as_readable() + '.dat'), 'wb') as f:
             database = msg.Database(info=self.get_info().as_message(),
                                     blocks=[block.as_message() for block in blocks])
             f.write(database.SerializeToString())

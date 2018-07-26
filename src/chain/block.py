@@ -56,7 +56,8 @@ class Block(TrustChainBlock):
             link_public_key=self.link_public_key,
             link_sequence_number=self.link_sequence_number,
             previous_hash=self.previous_hash,
-            signature=self.signature
+            signature=self.signature,
+            insert_time=str(self.insert_time)
         )
 
     @classmethod
@@ -75,7 +76,7 @@ class Block(TrustChainBlock):
             message.link_sequence_number,
             message.previous_hash,
             message.signature,
-            time.time()
+            message.insert_time
         ])
 
     @classmethod
