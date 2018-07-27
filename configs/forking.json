@@ -1,19 +1,15 @@
 {
   "node_groups": [
     {
-      "type": "Replay verifier",
-      "count": 4
-    },
-    {
-      "type": "Verification free-rider",
-      "count": 1
+      "type": "Honest agent",
+      "count": 3
     },
     {
       "type": "Forking",
       "count": 1
     }
   ],
-  "data_directory": "verification_doublespend",
+  "data_directory": "forking",
   "discovery_port": 8000,
   "node_port_range_begin": 10000,
   "emulation_duration": 200,

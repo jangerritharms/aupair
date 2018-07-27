@@ -29,7 +29,7 @@ def blocks_to_hash(blocks):
 
 class BadChainProtectAgent(ProtectSimpleAgent):
 
-    _type = "Incomplete chain"
+    _type = "Transaction hiding"
 
     def configure_message_handlers(self):
         super(BadChainProtectAgent, self).configure_message_handlers()

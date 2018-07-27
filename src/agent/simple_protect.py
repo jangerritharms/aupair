@@ -232,9 +232,6 @@ class ProtectSimpleAgent(BaseAgent):
                     self.logger.info("Solved by known double spend")
                     self.logger.info("Added replacement rule for agent %s",public_key)
                     return True
-            if block2 in blocks:
-                self.knows_about_double_spend.append(public_key)
-                return True
 
         return False
 
@@ -546,7 +543,7 @@ def configure_protect(agent):
         self.exchange_storage.add_exchange_storage(exchanges)
 
         if len(blocks) == 0:
-            self.cancel_interaction()
+            self.cancel_interaction(sender)
             return
 
         error_chain = self.database.add_blocks(chain)
@@ -770,7 +767,7 @@ def configure_protect(agent):
                             request.transfer_down_index = BlockIndex()
                         else:
                             sub_database = self.database.index(index)
-                            request.transfer_down = blocks_to_hash(blocks)
+                            request.transfer_down = blocks_to_hash(sub_database).encode('hex')
                             request.transfer_down_index = index
                         request.chain_length_sent = len(own_chain)
 

@@ -10,7 +10,7 @@ from src.agent.request_cache import RequestState
 
 class DoubleSpendAgent(ProtectSimpleAgent):
 
-    _type = "Double spender"
+    _type = "Forking"
 
     def __init__(self, *args, **kwargs):
         super(DoubleSpendAgent, self).__init__(*args, **kwargs)

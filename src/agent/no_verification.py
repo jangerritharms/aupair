@@ -10,7 +10,7 @@ from src.chain.index import BlockIndex
 
 class NoVerificationAgent(ProtectSimpleAgent):
 
-    _type = "Validation free-rider"
+    _type = "Verification free-rider"
 
     def configure_message_handlers(self):
         super(NoVerificationAgent, self).configure_message_handlers()

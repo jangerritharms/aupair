@@ -173,7 +173,7 @@ def configure_advanced(agent):
                     self.request_cache.get(sender).transfer_up_index = BlockIndex()
                 else:
                     sub_database = self.database.index(index)
-                    self.request_cache.get(sender).transfer_down = blocks_to_hash(blocks)
+                    self.request_cache.get(sender).transfer_down = blocks_to_hash(sub_database).encode('hex')
                     self.request_cache.get(sender).transfer_down_index = index
                 self.request_cache.get(sender).chain_length_sent = len(own_chain)
 

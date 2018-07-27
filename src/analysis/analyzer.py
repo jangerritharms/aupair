@@ -32,8 +32,9 @@ AGENT_CLASSES = [
 
 AGENT_CLASS_TYPES = {agent_cls._type: agent_cls for agent_cls in AGENT_CLASSES}
 AGENT_TYPE_LIST = [agent_cls._type for agent_cls in AGENT_CLASSES]
-AGENT_CLASS_COLOR = ["#f25f5c", "#4aad52", "#f25f5c", "#e86252", "#ff0000", "#4aad52", "#ff0000",
-                     "#ff0000"]
+AGENT_CLASS_COLOR = ["r", "g", "r", "b", "r", "g", "r",
+                     "r"]
+AGENT_CLASS_LINESTYLES = ['--', '-', '--', '-.', '--', '-', '--', '--']
 
 class Analyzer(object):
     """Defines different graphs for the results visualization.
@@ -86,6 +87,7 @@ class Analyzer(object):
 
         start_time = time.time()
         end_time = 0
+        used_labels = []
         for agent in self.agent_list:
             transactions = agent.transaction_blocks()
             print agent.info.type, len(transactions)
@@ -95,19 +97,25 @@ class Analyzer(object):
                     end_time = max(tx_times)
             start_time = end_time-200
             tx_times.insert(0, start_time)
+            tx_times.append(end_time)
             if len(transactions) == 0:
-                plt.step([0, 200], [0, 0], label=agent.info.type,
-                         color=AGENT_CLASS_COLOR[AGENT_TYPE_LIST.index(agent.info.type)])
+                plt.step([0, 200], [0, 0], AGENT_CLASS_COLOR[AGENT_TYPE_LIST.index(agent.info.type)],
+                label=agent.info.type if agent.info.type not in used_labels else '', linestyle=AGENT_CLASS_LINESTYLES[AGENT_TYPE_LIST.index(agent.info.type)])
             else:
-                plt.step([t-start_time for t in tx_times], range(0, len(transactions)+1), label=agent.info.type,
-                        color=AGENT_CLASS_COLOR[AGENT_TYPE_LIST.index(agent.info.type)])
+                y = range(0, len(transactions)+1)
+                y.append(y[-1])
+                plt.step([t-start_time for t in tx_times], y, AGENT_CLASS_COLOR[AGENT_TYPE_LIST.index(agent.info.type)],
+                label=agent.info.type if agent.info.type not in used_labels else '', linestyle=AGENT_CLASS_LINESTYLES[AGENT_TYPE_LIST.index(agent.info.type)])
+            
+            if agent.info.type not in used_labels:
+                used_labels.append(agent.info.type)
 
-        plt.title("Transaction history")
         plt.xlabel("Time of the experiment[s]")
         plt.ylabel("Number of transactions")
         plt.ylim(ymin=-1)
         plt.legend(loc="upper left")
         plt.tight_layout()
+        plt.grid()
         plt.show()
 
     def interaction_matrix(self):
@@ -160,5 +168,6 @@ class Analyzer(object):
 
         # for item in heat_plot.get_xticklabels():
         #     item.set_rotation(45)
-        plt.title("Interaction matrix")
+        plt.tight_layout()
         plt.show()
+        

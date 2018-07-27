@@ -2,18 +2,14 @@
   "node_groups": [
     {
       "type": "Honest agent",
-      "count": 4
+      "count": 3
     },
     {
-      "type": "Verification free-rider",
-      "count": 1
-    },
-    {
-      "type": "Forking",
+      "type": "Transaction hiding",
       "count": 1
     }
   ],
-  "data_directory": "verification_doublespend_honest",
+  "data_directory": "transaction_hiding",
   "discovery_port": 8000,
   "node_port_range_begin": 10000,
   "emulation_duration": 200,
