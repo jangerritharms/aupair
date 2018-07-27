@@ -30,7 +30,7 @@ class BaseAgent(object):
     for replying to blocks, registering and unregistering are included.
     """
 
-    _type = "Dissemination free-rider"
+    _type = "DFR - no exchanges"
 
     def __init__(self):
         """Creates a new BaseAgent, creates keys and declares class attributes.
@@ -110,6 +110,17 @@ class BaseAgent(object):
             AgentInfo -- AgentInfo object of the requested partner, None if none is found
         """
         return next((a for a in self.agents if a.public_key == public_key), None)
+    
+    def get_partner_by_address(self, address):
+        """Returns the partner as identified by the address string.
+        
+        Arguments:
+            address {string} -- Address string of the requested partner
+
+        Returns:
+            AgentInfo -- AgentInfo object of the requested partner, None if none is found
+        """
+        return next((a for a in self.agents if a.address == address), None)
 
     def request_interaction(self, partner=None):
         """Sends a block proposal to another known agent.

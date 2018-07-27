@@ -308,6 +308,11 @@ class ProtectSimpleAgent(BaseAgent):
         super(ProtectSimpleAgent, self).configure_message_handlers()
         configure_protect(self)
 
+    def cancel_interaction(self, sender):
+        self.request_cache.remove(sender)
+        self.ignore_list.append(sender)
+        self.com.send(sender, NewMessage(msg.PROTECT_REJECT, msg.Empty()))
+
 
 def configure_protect(agent):
 
@@ -420,11 +425,15 @@ def configure_protect(agent):
             return
 
         index = BlockIndex.from_message(body)
+        index.remove(self.get_partner_by_address(sender).public_key)
 
         blocks = []
         if len(index) == 0:
             self.request_cache.get(sender).transfer_up = ''
             self.request_cache.get(sender).transfer_up_index = BlockIndex()
+            self.cancel_interaction(sender)
+            self.logger.error("EMPTY EXCHANGE SHOULD NOT HAPPEN")
+            return
         else:
             blocks = self.database.index(index)
             self.request_cache.get(sender).transfer_up = blocks_to_hash(blocks)
@@ -482,7 +491,7 @@ def configure_protect(agent):
                 self.request_cache.get(sender).transfer_down_index = BlockIndex()
             else:
                 sub_database = self.database.index(index)
-                self.request_cache.get(sender).transfer_down = blocks_to_hash(blocks)
+                self.request_cache.get(sender).transfer_down = blocks_to_hash(sub_database).encode('hex')
                 self.request_cache.get(sender).transfer_down_index = index
             self.request_cache.get(sender).chain_length_sent = len(own_chain)
 
@@ -535,6 +544,10 @@ def configure_protect(agent):
         self.request_cache.get(sender).exchanges = exchanges
 
         self.exchange_storage.add_exchange_storage(exchanges)
+
+        if len(blocks) == 0:
+            self.cancel_interaction()
+            return
 
         error_chain = self.database.add_blocks(chain)
         error_blocks = self.database.add_blocks(blocks)
@@ -593,6 +606,12 @@ def configure_protect(agent):
             return
 
         block = Block.from_message(body)
+
+        if block.transaction.get('transfer_down') != self.request_cache.get(sender).transfer_down:
+            self.cancel_interaction(sender)
+            self.logger.error("Transfer down did not match")
+            return
+
         error = self.database.add(block)
 
         if error:

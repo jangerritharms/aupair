@@ -15,6 +15,8 @@ from src.agent.no_verification import NoVerificationAgent
 from src.agent.double_spend import DoubleSpendAgent
 from src.agent.bad_chain import BadChainProtectAgent
 from src.agent.advanced_protect import ProtectAdvancedAgent
+from src.agent.empty_exchanges import EmptyExchangeAgent
+from src.agent.self_request import SelfRequestAgent
 
 from src.pyipv8.ipv8.attestation.trustchain.database import TrustChainDB
 
@@ -25,7 +27,9 @@ AGENT_CLASSES = [
     BadChainProtectAgent,
     NoVerificationAgent,
     DoubleSpendAgent,
-    ProtectAdvancedAgent
+    ProtectAdvancedAgent,
+    EmptyExchangeAgent,
+    SelfRequestAgent
 ]
 AGENT_CLASS_TYPES = {agent_cls._type: agent_cls for agent_cls in AGENT_CLASSES}
 
@@ -82,6 +86,13 @@ class ExperimentRunner(object):
                     os.unlink(file_path)
             except Exception as e:
                 print(e)
+
+        if not os.path.exists(self.options['data_directory']):
+            try:
+                os.makedirs(self.options['data_directory'])
+            except OSError as exc: # Guard against race condition
+                if exc.errno != errno.EEXIST:
+                    raise
 
         files = os.listdir(self.options['data_directory'])
         for db_file in files:

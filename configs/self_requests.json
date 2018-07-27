@@ -1,0 +1,17 @@
+{
+  "node_groups": [
+    {
+      "type": "Honest agent",
+      "count": 3
+    },
+    {
+      "type": "DFR - self request",
+      "count": 1
+    }
+  ],
+  "data_directory": "self_request",
+  "discovery_port": 8000,
+  "node_port_range_begin": 10000,
+  "emulation_duration": 200,
+  "startup_time": 1
+}

@@ -15,6 +15,8 @@ from src.agent.no_verification import NoVerificationAgent
 from src.agent.double_spend import DoubleSpendAgent
 from src.agent.bad_chain import BadChainProtectAgent
 from src.agent.advanced_protect import ProtectAdvancedAgent
+from src.agent.empty_exchanges import EmptyExchangeAgent
+from src.agent.self_request import SelfRequestAgent
 
 AGENT_CLASSES = [
     BaseAgent,
@@ -23,12 +25,15 @@ AGENT_CLASSES = [
     BadChainProtectAgent,
     NoVerificationAgent,
     DoubleSpendAgent,
-    ProtectAdvancedAgent
+    ProtectAdvancedAgent,
+    EmptyExchangeAgent,
+    SelfRequestAgent
 ]
 
 AGENT_CLASS_TYPES = {agent_cls._type: agent_cls for agent_cls in AGENT_CLASSES}
 AGENT_TYPE_LIST = [agent_cls._type for agent_cls in AGENT_CLASSES]
-AGENT_CLASS_COLOR = ["#f25f5c", "#4aad52", "#f25f5c", "#e86252", "#ff0000", "#4aad52"]
+AGENT_CLASS_COLOR = ["#f25f5c", "#4aad52", "#f25f5c", "#e86252", "#ff0000", "#4aad52", "#ff0000",
+                     "#ff0000"]
 
 class Analyzer(object):
     """Defines different graphs for the results visualization.
@@ -79,13 +84,30 @@ class Analyzer(object):
 
     def transaction_history(self):
 
+        start_time = time.time()
+        end_time = 0
         for agent in self.agent_list:
             transactions = agent.transaction_blocks()
-            print time.mktime(datetime.datetime.strptime(transactions[0].insert_time, "%Y-%m-%d %H:%M:%S").timetuple())
-            print time.mktime(datetime.datetime.strptime(transactions[-1].insert_time, "%Y-%m-%d %H:%M:%S").timetuple())
-            plt.plot([time.mktime(datetime.datetime.strptime(tx.insert_time, "%Y-%m-%d %H:%M:%S").timetuple()) for tx in transactions], range(1, len(transactions)+1),
-                     color=AGENT_CLASS_COLOR[AGENT_TYPE_LIST.index(agent.info.type)])
+            print agent.info.type, len(transactions)
+            tx_times = [time.mktime(datetime.datetime.strptime(tx.insert_time, "%Y-%m-%d %H:%M:%S").timetuple()) for tx in transactions]
+            if len(tx_times) > 0:
+                if max(tx_times) > end_time:
+                    end_time = max(tx_times)
+            start_time = end_time-200
+            tx_times.insert(0, start_time)
+            if len(transactions) == 0:
+                plt.step([0, 200], [0, 0], label=agent.info.type,
+                         color=AGENT_CLASS_COLOR[AGENT_TYPE_LIST.index(agent.info.type)])
+            else:
+                plt.step([t-start_time for t in tx_times], range(0, len(transactions)+1), label=agent.info.type,
+                        color=AGENT_CLASS_COLOR[AGENT_TYPE_LIST.index(agent.info.type)])
 
+        plt.title("Transaction history")
+        plt.xlabel("Time of the experiment[s]")
+        plt.ylabel("Number of transactions")
+        plt.ylim(ymin=-1)
+        plt.legend(loc="upper left")
+        plt.tight_layout()
         plt.show()
 
     def interaction_matrix(self):
