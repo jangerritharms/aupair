@@ -108,3 +108,4 @@ sqlite/
 
 
 .vscode/
+*.dat
