@@ -48,7 +48,7 @@ class BadChainProtectAgent(ProtectSimpleAgent):
         chain = self.database.get_chain(self.public_key)
 
         # manipulate the chain by removing an item
-        if len(chain) > 5:
+        if len(chain) > 25:
             chain.pop(4)
 
         db = msg.Database(info=self.get_info().as_message(),
@@ -83,35 +83,38 @@ def configure_badchain(agent):
 
         blocks = [Block.from_message(block) for block in body.blocks]
 
-        error = self.database.add_blocks(blocks)
+        error_blocks = self.database.add_blocks(blocks)
 
-        if error:
-            self.logger.warning("Detected double spend of agent %s", PublicKey.from_bin(error.public_key).as_readable())
+        if error_blocks:
+            self.database.add_blocks(blocks, False)
+            self.logger.warning("Detected double spend of agent %s", PublicKey.from_bin(error_blocks.public_key).as_readable())
         
         self.request_cache.get(sender).transfer_up = blocks_to_hash(blocks)
         self.request_cache.get(sender).transfer_up_index = BlockIndex.from_blocks(blocks)
 
         verification = self.verify_exchange(self.request_cache.get(sender).chain,
                                             self.request_cache.get(sender).exchanges)
+        self.logger.error("Verification returned %s", verification)
 
-        if verification:
+        if verification is True:
             own_chain = self.database.get_chain(self.public_key)
 
             # manipulate the chain by removing an item
-            if len(own_chain) > 5:
+            if len(own_chain) > 25:
                 own_chain.pop(4)
 
             own_index = BlockIndex.from_blocks(self.database.get_all_blocks())
             partner_index = self.request_cache.get(sender).index
             index = (own_index - partner_index)
+            index.remove(PublicKey.from_bin(self.request_cache.get(sender).chain[0].public_key))
 
             sub_database = []
             if len(index) == 0:
-                self.request_cache.get(sender).transfer_up = ''
-                self.request_cache.get(sender).transfer_up_index = BlockIndex()
+                self.request_cache.get(sender).transfer_down = ''
+                self.request_cache.get(sender).transfer_down_index = BlockIndex()
             else:
                 sub_database = self.database.index(index)
-                self.request_cache.get(sender).transfer_down = blocks_to_hash(blocks)
+                self.request_cache.get(sender).transfer_down = blocks_to_hash(sub_database).encode('hex')
                 self.request_cache.get(sender).transfer_down_index = index
             self.request_cache.get(sender).chain_length_sent = len(own_chain)
 
@@ -121,8 +124,17 @@ def configure_badchain(agent):
             self.com.send(sender, NewMessage(msg.PROTECT_CHAIN_BLOCKS, db))
             self.request_cache.get(sender).update_state(RequestState.PROTECT_EXCHANGE)
 
-        else:
+        elif verification is False:
             self.logger.error("Verification of %s's exchanges failed", sender)
             self.request_cache.remove(sender)
             self.ignore_list.append(sender)
             self.com.send(sender, NewMessage(msg.PROTECT_REJECT, msg.Empty()))
+
+        elif type(verification) is str:
+            block_hash = verification
+            self.logger.warning("Verification of hash was not correct, finding double spend")
+            self.request_cache.get(sender).update_state(
+                RequestState.PROTECT_EXCHANGE_CLARIFICATION_RESPONDER)
+            self.com.send(sender,
+                          NewMessage(msg.PROTECT_EXCHANGE_REQUEST,
+                                     msg.ExchangeRequest(exchange_hash=verification)))
