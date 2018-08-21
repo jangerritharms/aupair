@@ -17,6 +17,7 @@ from src.agent.bad_chain import BadChainProtectAgent
 from src.agent.advanced_protect import ProtectAdvancedAgent
 from src.agent.empty_exchanges import EmptyExchangeAgent
 from src.agent.self_request import SelfRequestAgent
+from src.agent.collaborator import CollaboratingAgent
 
 AGENT_CLASSES = [
     BaseAgent,
@@ -27,14 +28,26 @@ AGENT_CLASSES = [
     DoubleSpendAgent,
     ProtectAdvancedAgent,
     EmptyExchangeAgent,
-    SelfRequestAgent
+    SelfRequestAgent,
+    CollaboratingAgent
 ]
 
 AGENT_CLASS_TYPES = {agent_cls._type: agent_cls for agent_cls in AGENT_CLASSES}
 AGENT_TYPE_LIST = [agent_cls._type for agent_cls in AGENT_CLASSES]
 AGENT_CLASS_COLOR = ["r", "g", "r", "b", "r", "g", "r",
-                     "r"]
-AGENT_CLASS_LINESTYLES = ['--', '-', '--', '-.', '--', '-', '--', '--']
+                     "r", "r"]
+AGENT_LABELS = [
+    "Colluding free-rider",
+    "Honest agent without auditing",
+    "Block withholder",
+    "Verification free-rider",
+    "Double spender",
+    "Honest agent with auditing",
+    "Honest agent",
+    "Honest agent",
+    "Collaborator"
+]
+AGENT_CLASS_LINESTYLES = ['--', '-', '--', '-.', '--', '-', '--', '--', '--']
 
 class Analyzer(object):
     """Defines different graphs for the results visualization.
@@ -100,12 +113,17 @@ class Analyzer(object):
             tx_times.append(end_time)
             if len(transactions) == 0:
                 plt.step([0, 200], [0, 0], AGENT_CLASS_COLOR[AGENT_TYPE_LIST.index(agent.info.type)],
-                label=agent.info.type if agent.info.type not in used_labels else '', linestyle=AGENT_CLASS_LINESTYLES[AGENT_TYPE_LIST.index(agent.info.type)])
+                label=AGENT_LABELS[AGENT_TYPE_LIST.index(agent.info.type)] if agent.info.type not in used_labels else '', linestyle=AGENT_CLASS_LINESTYLES[AGENT_TYPE_LIST.index(agent.info.type)])
             else:
                 y = range(0, len(transactions)+1)
+                dashes = []
+                if AGENT_CLASS_LINESTYLES[AGENT_TYPE_LIST.index(agent.info.type)] == '--':
+                    dashes = [6, 2]
+                elif AGENT_CLASS_LINESTYLES[AGENT_TYPE_LIST.index(agent.info.type)] == '-.':
+                    dashes = [2, 2, 10, 2]
                 y.append(y[-1])
                 plt.step([t-start_time for t in tx_times], y, AGENT_CLASS_COLOR[AGENT_TYPE_LIST.index(agent.info.type)],
-                label=agent.info.type if agent.info.type not in used_labels else '', linestyle=AGENT_CLASS_LINESTYLES[AGENT_TYPE_LIST.index(agent.info.type)])
+                label=AGENT_LABELS[AGENT_TYPE_LIST.index(agent.info.type)] if agent.info.type not in used_labels else '', dashes=dashes)
             
             if agent.info.type not in used_labels:
                 used_labels.append(agent.info.type)
@@ -149,14 +167,14 @@ class Analyzer(object):
         counter = 0
         xlabels = []
         for agent in self.agent_list:
-            xlabels.append(agent.info.type)
+            xlabels.append(AGENT_LABELS[AGENT_TYPE_LIST.index(agent.info.type)])
             for tx in agent.transaction_blocks():
                 partner_index = self.agent_key_list.index(tx.link_public_key)
                 if partner_index > counter:
                     matrix[counter][partner_index] = matrix[counter][partner_index] + 1
             counter += 1
 
-        cmap = sns.diverging_palette(220, 10, as_cmap=True)
+        cmap = sns.diverging_palette(10, 220, as_cmap=True)
         print matrix
 
         # Draw the heatmap with the mask and correct aspect ratio
