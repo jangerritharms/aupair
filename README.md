@@ -31,4 +31,3 @@ considering agents Alice (A) and Bob (B).
 * B checks the chain and if complete calculates the difference in blocks, which he sends to A, signing block
 * B calculates trustworthiness of A
 
-We are protecting against double-spending, the self-
